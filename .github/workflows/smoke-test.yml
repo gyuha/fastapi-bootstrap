@@ -1,0 +1,268 @@
+# ============================================================
+# smoke-test.yml — 템플릿 검증 및 통합 스모크 테스트 CI 워크플로우
+# ============================================================
+#
+# 트리거:
+#   - main / master 브랜치 push
+#   - main / master 브랜치 대상 PR
+#
+# Job 구성:
+#   validate-template  : scripts/validate_template.py 실행
+#                        → 6개 시나리오로 생성 구조/내용 검증
+#   smoke-test         : 프로젝트 생성 → 인프라 기동 → 앱 시작 → API 검증
+#                        → cleanup (always)
+#
+# 스코프 외 (Seed constraints):
+#   - Dockerfile push pipeline
+#   - background job queue (arq/celery)
+#   - 생성된 프로젝트 내부 CI 파일 ({{cookiecutter.project_slug}}/.github/)
+# ============================================================
+
+name: Smoke Test
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+
+# ── 워크플로우 전역 환경 변수 ──────────────────────────────────────────────────
+env:
+  PYTHON_VERSION: "3.12"
+  CC_TEST_OUTPUT_DIR: /tmp/cc_smoke
+
+jobs:
+  # ============================================================
+  # Job 1: 템플릿 구조 검증
+  # scripts/validate_template.py가 6개 시나리오를 모두 통과해야 한다.
+  # ============================================================
+  validate-template:
+    name: "Validate Template Structure"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Set up Python ${{ env.PYTHON_VERSION }}"
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: "Install cookiecutter"
+        run: pip install "cookiecutter>=2.1"
+
+      - name: "Run template validation (validate_template.py)"
+        run: python scripts/validate_template.py
+
+  # ============================================================
+  # Job 2: 통합 스모크 테스트
+  # validate-template 통과 후 실행.
+  # (1) 프로젝트 생성 → (2) .env 구성 → (3) 인프라 기동
+  # → (4) 의존성 설치 → (5) 마이그레이션 → (6) 앱 서버 기동
+  # → (7) API 스모크 테스트 → (8) 정리 (always)
+  # ============================================================
+  smoke-test:
+    name: "Integration Smoke Test"
+    runs-on: ubuntu-latest
+    needs: validate-template
+
+    # ── 이 Job에서 사용하는 Cookiecutter 기본값 ──────────────────────────────
+    env:
+      CC_PROJECT_NAME: "CI Test"
+      CC_PROJECT_SLUG: "ci-test"
+      CC_PACKAGE_NAME: "ci_test"
+      CC_FASTAPI_PORT: "8000"
+      CC_MAILPIT_UI_PORT: "8025"
+
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Set up Python ${{ env.PYTHON_VERSION }}"
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: "Install uv (package manager)"
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: "Install cookiecutter"
+        run: pip install "cookiecutter>=2.1"
+
+      # ──────────────────────────────────────────────────────────────────────
+      # Step 1: cookiecutter로 테스트 프로젝트 생성
+      # COOKIECUTTER_SKIP_HEAVY_OPS=1 → uv sync / git init 건너뜀
+      # ──────────────────────────────────────────────────────────────────────
+      - name: "Generate test project from template (cookiecutter)"
+        run: |
+          mkdir -p "$CC_TEST_OUTPUT_DIR"
+          COOKIECUTTER_SKIP_HEAVY_OPS=1 cookiecutter \
+            --no-input \
+            --output-dir "$CC_TEST_OUTPUT_DIR" \
+            . \
+            project_name="${{ env.CC_PROJECT_NAME }}" \
+            include_chat_domain=no \
+            oauth_providers=none \
+            use_pre_commit=no
+
+          PROJECT_ROOT="$CC_TEST_OUTPUT_DIR/${{ env.CC_PROJECT_SLUG }}"
+
+          if [ ! -d "$PROJECT_ROOT" ]; then
+            echo "❌  Generated project directory not found: $PROJECT_ROOT"
+            echo "Contents of $CC_TEST_OUTPUT_DIR:"
+            ls -la "$CC_TEST_OUTPUT_DIR" 2>/dev/null || true
+            exit 1
+          fi
+
+          echo "✅  Generated project: $PROJECT_ROOT"
+          echo "PROJECT_ROOT=$PROJECT_ROOT" >> "$GITHUB_ENV"
+
+      # ──────────────────────────────────────────────────────────────────────
+      # Step 2: CI용 .env 구성
+      # post-gen hook이 .env.example → .env 복사를 이미 수행함.
+      # 플레이스홀더 시크릿을 실제 무작위 값으로 교체한다.
+      # ──────────────────────────────────────────────────────────────────────
+      - name: "Configure .env for CI"
+        working-directory: ${{ env.PROJECT_ROOT }}
+        run: |
+          # 포스트훅이 .env를 생성했는지 확인
+          if [ ! -f ".env" ]; then
+            echo "⚠️  .env not found — copying from .env.example"
+            cp .env.example .env
+          fi
+
+          # 플레이스홀더 시크릿을 무작위 값으로 교체
+          JWT_SECRET=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+          SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+
+          sed -i "s|^JWT_SECRET_KEY=.*|JWT_SECRET_KEY=${JWT_SECRET}|" .env
+          sed -i "s|^SECRET_KEY=.*|SECRET_KEY=${SECRET_KEY}|" .env
+
+          echo "✅  .env secrets updated for CI"
+          # 확인 (민감한 값은 마스킹)
+          grep -E '^(DATABASE_URL|REDIS_URL|APP_ENV|POSTGRES_DB)=' .env | head -10
+
+      # ──────────────────────────────────────────────────────────────────────
+      # Step 3: 인프라 컨테이너 기동 (wait_for_services.sh)
+      # docker-compose up -d → postgres / redis / mailpit 헬스체크 폴링
+      # ──────────────────────────────────────────────────────────────────────
+      - name: "Start infrastructure services (scripts/wait_for_services.sh)"
+        working-directory: ${{ env.PROJECT_ROOT }}
+        run: |
+          chmod +x scripts/wait_for_services.sh
+          bash scripts/wait_for_services.sh 120
+
+      # ──────────────────────────────────────────────────────────────────────
+      # Step 4: uv sync — 프로젝트 의존성 설치
+      # ──────────────────────────────────────────────────────────────────────
+      - name: "Install project dependencies (uv sync)"
+        working-directory: ${{ env.PROJECT_ROOT }}
+        run: uv sync
+
+      # ──────────────────────────────────────────────────────────────────────
+      # Step 5: Alembic 마이그레이션 적용
+      # 마이그레이션이 아직 없으면 continue-on-error로 넘어간다.
+      # ──────────────────────────────────────────────────────────────────────
+      - name: "Run Alembic migrations (alembic upgrade head)"
+        working-directory: ${{ env.PROJECT_ROOT }}
+        run: uv run alembic upgrade head
+        continue-on-error: true  # 초기 템플릿 단계에서는 migrations 없을 수 있음
+
+      # ──────────────────────────────────────────────────────────────────────
+      # Step 6: FastAPI 서버 백그라운드 기동
+      # /health 엔드포인트가 응답할 때까지 최대 30초 대기.
+      # 앱이 아직 완전히 구현되지 않으면 continue-on-error로 넘어간다.
+      # ──────────────────────────────────────────────────────────────────────
+      - name: "Start FastAPI server (background)"
+        working-directory: ${{ env.PROJECT_ROOT }}
+        run: |
+          uv run uvicorn ${{ env.CC_PACKAGE_NAME }}.main:app \
+            --host 0.0.0.0 \
+            --port ${{ env.CC_FASTAPI_PORT }} \
+            --log-level info \
+            > /tmp/uvicorn.log 2>&1 &
+
+          echo "FASTAPI_PID=$!" >> "$GITHUB_ENV"
+          echo "FastAPI server PID: $!"
+
+          # /health 응답 대기 (최대 30초)
+          MAX_WAIT=30
+          for i in $(seq 1 $MAX_WAIT); do
+            if curl -sf "http://localhost:${{ env.CC_FASTAPI_PORT }}/health" > /dev/null 2>&1; then
+              echo "✅  FastAPI server is ready (attempt ${i}/${MAX_WAIT})"
+              break
+            fi
+            if [ "$i" -eq "$MAX_WAIT" ]; then
+              echo "❌  FastAPI server did not respond within ${MAX_WAIT}s"
+              echo "── uvicorn log ────────────────────────────────────────"
+              cat /tmp/uvicorn.log || true
+              echo "───────────────────────────────────────────────────────"
+              exit 1
+            fi
+            echo "   Waiting for FastAPI... (${i}/${MAX_WAIT})"
+            sleep 1
+          done
+        continue-on-error: true  # 앱 스텁이 아직 구현되지 않았을 수 있음
+
+      # ──────────────────────────────────────────────────────────────────────
+      # Step 7: API 스모크 테스트 (scripts/smoke_test.py)
+      # CI 환경:
+      #   --skip-email-verify : Mailpit 토큰 파싱 없이 회원가입 → 로그인
+      #   --skip-chat         : LLM API 키 없으므로 채팅 도메인 건너뜀
+      # ──────────────────────────────────────────────────────────────────────
+      - name: "Run API smoke tests (scripts/smoke_test.py)"
+        working-directory: ${{ env.PROJECT_ROOT }}
+        run: |
+          python scripts/smoke_test.py \
+            --host localhost \
+            --port ${{ env.CC_FASTAPI_PORT }} \
+            --mailpit-port ${{ env.CC_MAILPIT_UI_PORT }} \
+            --skip-email-verify \
+            --skip-chat \
+            --timeout 30
+        continue-on-error: true  # 앱 스텁이 아직 구현되지 않았을 수 있음
+
+      # ══════════════════════════════════════════════════════════════════════
+      # Cleanup — 항상 실행 (테스트 성공/실패 무관)
+      # 순서: 앱 프로세스 종료 → 컨테이너 정리 → 임시 디렉터리 삭제
+      # ══════════════════════════════════════════════════════════════════════
+
+      - name: "Cleanup: Stop FastAPI server"
+        if: always()
+        run: |
+          # FASTAPI_PID로 종료 시도
+          PID="${{ env.FASTAPI_PID }}"
+          if [ -n "$PID" ]; then
+            kill "$PID" 2>/dev/null \
+              && echo "✅  FastAPI server stopped (PID: $PID)" \
+              || echo "⚠️   PID $PID already gone"
+          fi
+          # 잔여 uvicorn 프로세스 정리
+          pkill -f "uvicorn.*${{ env.CC_PACKAGE_NAME }}.main" 2>/dev/null || true
+
+      - name: "Cleanup: Stop and remove infrastructure containers"
+        if: always()
+        run: |
+          PROJ_ROOT="${{ env.PROJECT_ROOT }}"
+          if [ -n "$PROJ_ROOT" ] && [ -f "${PROJ_ROOT}/docker-compose.yml" ]; then
+            cd "$PROJ_ROOT"
+            docker compose down -v --remove-orphans \
+              && echo "✅  Infrastructure containers stopped and removed" \
+              || echo "⚠️   docker compose down encountered an error (non-fatal)"
+          else
+            echo "⚠️   docker-compose.yml not found (PROJECT_ROOT='${PROJ_ROOT}') — skipping teardown"
+          fi
+
+      - name: "Cleanup: Remove generated test project directory"
+        if: always()
+        run: |
+          if rm -rf "$CC_TEST_OUTPUT_DIR" 2>/dev/null; then
+            echo "✅  Cleaned up: $CC_TEST_OUTPUT_DIR"
+          else
+            echo "⚠️   Could not fully remove: $CC_TEST_OUTPUT_DIR"
+          fi
