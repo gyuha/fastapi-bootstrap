@@ -1,0 +1,156 @@
+goal: >
+  FastAPI 기반 백엔드 부트스트랩을 Cookiecutter 템플릿으로 만든다.
+  Light 모듈러 모놀리스 DDD 구조 위에 production-grade 회원 인증(JWT+OAuth+RBAC)과
+  LangChain+langchain-litellm 기반 LLM 채팅 proxy 도메인을 기본 탑재하고,
+  docker-compose + uv로 1분 안에 로컬 부팅 가능해야 한다.
+
+constraints:
+  - "Python >= 3.12"
+  - "패키지 매니저: uv"
+  - "백엔드 프레임워크: FastAPI"
+  - "DB: PostgreSQL"
+  - "Cache/Pub-Sub: Redis"
+  - "ORM: SQLAlchemy 2.0 (async)"
+  - "Migration: Alembic"
+  - "배포 형태: Cookiecutter 템플릿 (Moderate 변수화)"
+  - "아키텍처: Light 모듈러 모놀리스 — domains/<bc>/{router,service,repository,models,schemas}.py"
+  - "API 경로: /api/v1/<domain>/..."
+  - "JWT 전송: Authorization Bearer 헤더 전용"
+  - "Access TTL 15분 / Refresh TTL 7일 / refresh rotation + reuse detection"
+  - "비밀번호 해시: argon2"
+  - "LLM 스택: LangChain runnable + langchain-litellm 어댑터"
+  - "SSE: sse-starlette"
+  - "Email: fastapi-mail (dev=mailpit, prod=SMTP env)"
+  - "Logging: structlog JSON + correlation_id middleware"
+  - "Local dev: docker-compose는 postgres/redis/mailpit만, FastAPI 앱은 host에서 uv run"
+  - "품질 도구: ruff + mypy + pytest(+pytest-asyncio) + pre-commit"
+  - "스코프 외: CI/CD workflow 파일, background job queue(arq/celery), Dockerfile push pipeline"
+
+acceptance_criteria:
+  - "cookiecutter <template-repo>로 입력 변수만 채우면 동작하는 새 프로젝트가 생성된다"
+  - "make dev (또는 just dev)로 postgres/redis/mailpit 컨테이너가 뜨고 FastAPI hot reload 서버가 호스트에서 실행된다"
+  - "make migrate가 Alembic 마이그레이션을 적용한다"
+  - "POST /api/v1/auth/signup가 사용자 생성 + 인증 메일 발송(mailpit 도착) + argon2 해시 저장한다"
+  - "POST /api/v1/auth/verify-email/{token}이 사용자를 verified=true로 전이한다"
+  - "POST /api/v1/auth/login이 access+refresh JWT를 Bearer 형식으로 반환한다 (TTL 15m/7d)"
+  - "POST /api/v1/auth/refresh가 refresh 토큰을 회전하고 재사용 시 모든 세션을 무효화한다"
+  - "POST /api/v1/auth/logout이 jti를 Redis blacklist에 등록해 즉시 무효화한다"
+  - "password-reset / reset-confirm 플로우가 메일 링크로 동작한다"
+  - "GET /api/v1/auth/oauth/{provider}/login + callback (google|kakao|naver) 이 federated 로그인 + 사용자 프로비저닝을 완료한다"
+  - "RBAC: Depends(require_permission(\"chat:write\")) 가 권한 없는 호출에 403을 반환한다"
+  - "POST /api/v1/chat/conversations + POST /api/v1/chat/conversations/{id}/messages 가 SSE로 토큰을 스트리밍하며 messages 테이블에 영속화한다"
+  - "Conversation.title 이 첫 user/assistant 턴 종료 후 LLM 요약으로 자동 채워진다"
+  - "LLM 프로바이더 교체가 환경변수 1개 변경만으로 끝난다 (chat 도메인 코드 수정 없음)"
+  - "slowapi 기반 Redis rate limit이 사용자별/IP별로 적용된다"
+  - "Cookiecutter post-gen hook: oauth_providers 미선택 시 해당 어댑터 파일 제거, include_chat_domain=no 시 chat 도메인 + langchain/litellm 의존성 제거"
+  - "pre-commit 훅이 ruff + mypy를 변경 파일에만 실행한다"
+  - "/health, /ready 엔드포인트가 의존성 헬스 체크 후 200을 반환한다"
+  - "multi-stage Dockerfile이 dev 도구 없는 운영 이미지를 산출한다"
+  - "structlog가 모든 요청 로그에 correlation_id를 포함시킨다"
+
+ontology_schema:
+  name: FastAPIBootstrapTemplate
+  description: >
+    Cookiecutter 템플릿이 산출하는 FastAPI 백엔드 — auth/chat 도메인을 가진
+    Light 모듈러 모놀리스 구조와 부속 인프라 정의.
+  fields:
+    - name: template_variables
+      type: object
+      description: "project_name, package_name, postgres_db, oauth_providers[], include_chat_domain, llm_provider 기본값"
+    - name: domains
+      type: array
+      description: "src/<package>/domains/ 하위 bounded contexts: auth, chat"
+    - name: auth_entities
+      type: array
+      description: "User, Role, Permission, RolePermission, RefreshToken, EmailVerification, PasswordReset, OAuthAccount"
+    - name: chat_entities
+      type: array
+      description: "Conversation(id,user_id,title,system_prompt,model_name,created_at), Message(id,conv_id,role,content,token_count,finish_reason,created_at)"
+    - name: user_fields
+      type: object
+      description: "email(unique), display_name, hashed_password(argon2), is_verified, created_at"
+    - name: rbac_model
+      type: object
+      description: "Role + Permission 2 테이블 + RolePermission M:N, require_permission(key) 데코레이터"
+    - name: jwt_strategy
+      type: object
+      description: "Bearer 전용, access 15m / refresh 7d, rotation + reuse detection, jti Redis blacklist"
+    - name: oauth_providers
+      type: array
+      description: "google, kakao, naver — 각 어댑터 파일 분리, post-gen 시 미선택 항목 제거"
+    - name: redis_uses
+      type: array
+      description: "jwt_blacklist, rate_limit, cache, sse_fanout, oauth_state"
+    - name: llm_stack
+      type: object
+      description: "LangChain runnable + langchain-litellm 어댑터, sse-starlette로 토큰 스트리밍"
+    - name: infra_compose
+      type: object
+      description: "postgres, redis, mailpit (compose); FastAPI는 host에서 uv run"
+    - name: observability
+      type: object
+      description: "structlog JSON 출력 + correlation_id middleware"
+    - name: quality_tooling
+      type: object
+      description: "ruff, mypy, pytest, pre-commit"
+    - name: api_layout
+      type: string
+      description: "/api/v1/<domain>/... prefix"
+    - name: project_type
+      type: string
+      description: "greenfield (workspace 비어 있음)"
+
+evaluation_principles:
+  - name: reusability
+    description: "단일 cookiecutter 명령으로 새 프로젝트가 생성되고, 도메인/프로바이더 토글이 코드를 깔끔히 추가/제거한다"
+    weight: 0.25
+  - name: security_posture
+    description: "argon2 해시, refresh rotation+reuse detection, JWT blacklist, OAuth state nonce, RBAC 강제 적용"
+    weight: 0.20
+  - name: domain_isolation
+    description: "각 도메인은 domains/<bc>/ 안에서 닫혀 있고 다른 도메인의 DB 모델/리포지토리를 직접 import하지 않는다"
+    weight: 0.15
+  - name: developer_experience
+    description: "make dev로 의존성 컨테이너 + FastAPI hot reload가 60초 안에 응답한다"
+    weight: 0.15
+  - name: llm_provider_portability
+    description: "LLM 프로바이더 교체가 env 변경만으로 끝난다"
+    weight: 0.10
+  - name: observability_baseline
+    description: "모든 요청 로그에 correlation_id가 붙고 JSON으로 출력된다"
+    weight: 0.05
+  - name: migration_safety
+    description: "스키마 변경은 항상 Alembic revision으로 관리되고 autogenerate가 검증된다"
+    weight: 0.05
+  - name: testability
+    description: "auth/chat 핵심 흐름은 async pytest로 통합 검증된다"
+    weight: 0.05
+
+exit_conditions:
+  - name: bootstrap_runs
+    description: "생성된 프로젝트가 첫 시도에 부팅된다"
+    criteria: "cookiecutter 실행 → make dev → curl /health == 200"
+  - name: auth_e2e
+    description: "회원 인증 전 흐름이 통합 테스트로 통과한다"
+    criteria: "signup → verify → login → refresh → logout 시나리오의 pytest 통과"
+  - name: chat_streaming
+    description: "LLM 채팅이 SSE 스트리밍 + DB 영속화한다"
+    criteria: "POST /chat/conversations/{id}/messages가 SSE chunk를 송출하고 messages 행이 생성된다"
+  - name: rbac_enforced
+    description: "권한 없는 접근이 차단된다"
+    criteria: "필요 permission 미보유 호출이 403을 반환한다"
+  - name: toggles_work
+    description: "Cookiecutter 토글이 코드를 정확히 포함/제외한다"
+    criteria: "include_chat_domain=no 시 chat 패키지 + langchain/litellm 의존성 제거, 미선택 oauth provider 어댑터 파일 잔존 0건"
+
+metadata:
+  project_type: greenfield
+  cwd: /Users/gyuha/workspace/fastapi-bootstrap
+  ambiguity_score: 0.15
+  interview_id: interview_20260510_134033
+  interview_mode: path-b-conversational
+  generated_at: 2026-05-10
+  notes: |
+    MCP interview 세션이 Claude Agent SDK의 'max turns 1' 오류로 답변 기록 단계에 진입하지 못했음.
+    실제 인터뷰는 본 대화에서 path-b-conversational 모드로 수행되었고,
+    18개 결정 + 9개 묵시적 default가 본 Seed에 결정화되었음.
