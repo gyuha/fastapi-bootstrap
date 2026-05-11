@@ -9,7 +9,7 @@ user's template variable choices:
   - include_chat_domain=no   → remove chat domain + chat tests + LLM deps note
   - oauth_providers=<subset> → remove adapter files for unselected providers
   - oauth_providers=none     → remove entire oauth/ directory
-  - use_pre_commit=no        → remove .pre-commit-config.yaml
+  - use_pre_commit=no        → remove .pre-commit-config.yaml and .secrets.baseline
 
 Also performs one-time bootstrap:
   - .env.example → .env  (copy, skip if .env already exists)
@@ -18,6 +18,7 @@ Also performs one-time bootstrap:
 """
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import stat
@@ -73,6 +74,23 @@ def _rm(msg: str) -> str:
 
 def _warn(msg: str) -> str:
     return _c(f"  !  {msg}", "31")   # red
+
+
+# ---------------------------------------------------------------------------
+# Logging setup
+# ---------------------------------------------------------------------------
+# The hook runs before `uv sync` installs the project's dependencies, so we
+# intentionally use Python's stdlib `logging` (not structlog) here.
+# Log records are emitted to stderr at DEBUG level so they don't pollute the
+# friendly user-facing stdout messages, but are still accessible when
+# redirecting/inspecting hook output in CI.
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s [post_gen_project] [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+    stream=sys.stderr,
+)
+_log: logging.Logger = logging.getLogger("post_gen_project")
 
 
 # ---------------------------------------------------------------------------
@@ -169,13 +187,119 @@ def cleanup_oauth_providers() -> None:
 # ---------------------------------------------------------------------------
 
 def cleanup_pre_commit() -> None:
-    """Remove .pre-commit-config.yaml when use_pre_commit=no."""
+    """Remove pre-commit artefacts when use_pre_commit=no.
+
+    Removes:
+    * ``.pre-commit-config.yaml`` — hook definitions
+    * ``.secrets.baseline``       — detect-secrets baseline (only useful with pre-commit)
+    """
     if USE_PRE_COMMIT == "yes":
         return
 
-    print("\n[step 3/6] use_pre_commit=no  →  removing .pre-commit-config.yaml …")
+    print("\n[step 3/6] use_pre_commit=no  →  removing pre-commit artefacts …")
     remove_path(PROJECT_ROOT / ".pre-commit-config.yaml")
-    print(_ok("pre-commit config removed."))
+    remove_path(PROJECT_ROOT / ".secrets.baseline")
+    print(_ok("pre-commit config and secrets baseline removed."))
+
+
+# ---------------------------------------------------------------------------
+# Cleanup orchestrator — all optional module cleanup in one place
+# ---------------------------------------------------------------------------
+
+def cleanup_optional_modules() -> None:
+    """Remove directories and files for all disabled optional modules.
+
+    This is the **single entry-point** for feature-toggle-based file cleanup in
+    the post-generation hook.  It reads the rendered cookiecutter variables and
+    removes the directories / adapter files that correspond to every feature
+    that the user opted out of.
+
+    Optional modules
+    ----------------
+    1. **Chat domain** — controlled by ``include_chat_domain`` (yes | no)
+
+       * ``yes`` → Keep ``src/<pkg>/domains/chat/`` and ``tests/chat/``.
+         LangChain + langchain-litellm dependencies remain in pyproject.toml
+         (already rendered via Jinja2 conditional block).
+       * ``no``  → Remove ``src/<pkg>/domains/chat/`` and ``tests/chat/``.
+         The Jinja2 conditionals in pyproject.toml and main.py ensure LLM
+         dependencies and the chat router are already absent from the rendered
+         files; this function removes the remaining source tree.
+
+    2. **OAuth providers** — controlled by ``oauth_providers`` (comma-list | none)
+
+       * ``"google,kakao,naver"`` → All adapters kept (no-op).
+       * ``"google,kakao"``       → ``oauth/naver.py`` and its test file removed.
+       * ``"none"``               → Entire ``oauth/`` directory and all
+         per-provider test files removed.
+
+    3. **Pre-commit configuration** — controlled by ``use_pre_commit`` (yes | no)
+
+       * ``yes`` → ``.pre-commit-config.yaml`` and ``.secrets.baseline`` kept.
+       * ``no``  → Both ``.pre-commit-config.yaml`` and ``.secrets.baseline`` removed.
+
+    Execution order
+    ---------------
+    Sub-steps run in dependency order:
+
+    1. Chat domain  (largest removal; reported first to orient the user)
+    2. OAuth adapters (scoped inside the auth domain)
+    3. Pre-commit file (infrastructure-level; not a bounded context)
+
+    Extensibility
+    -------------
+    To add a new optional module:
+
+    1. Add a new template variable to ``cookiecutter.json``.
+    2. Write a dedicated ``_cleanup_<module>()`` helper function (following the
+       pattern of :func:`cleanup_chat_domain`).
+    3. Call the new helper from this function.
+
+    This keeps each module's removal logic isolated and independently testable
+    while the orchestrator remains the sole caller in :func:`main`.
+
+    Notes
+    -----
+    * This function does **not** modify ``pyproject.toml`` or ``main.py`` —
+      Cookiecutter's Jinja2 rendering already handles those files via
+      Jinja2 ``if cookiecutter.include_chat_domain == "yes"`` blocks.
+    * Every sub-step is idempotent: calling this on an already-cleaned project
+      is safe and produces no errors (missing paths are silently skipped).
+    """
+    _log.debug(
+        "cleanup_optional_modules: starting — chat=%s oauth=%s pre_commit=%s",
+        INCLUDE_CHAT_DOMAIN,
+        OAUTH_PROVIDERS_RAW,
+        USE_PRE_COMMIT,
+    )
+
+    # ── Display what will be processed ────────────────────────────────────────
+    _chat_status = "included" if INCLUDE_CHAT_DOMAIN == "yes" else "EXCLUDED (removing)"
+    _oauth_status = (
+        "none (removing)"
+        if OAUTH_PROVIDERS_RAW.strip().lower() == "none"
+        else OAUTH_PROVIDERS_RAW
+    )
+    _pre_commit_status = "enabled" if USE_PRE_COMMIT == "yes" else "DISABLED (removing)"
+
+    print("\n" + _c("─" * 64, "90"))
+    print(_c("  Optional module cleanup", "1;36"))
+    print(_c("─" * 64, "90"))
+    print(f"  include_chat_domain  :  {_c(_chat_status,  '32' if INCLUDE_CHAT_DOMAIN == 'yes' else '33')}")
+    print(f"  oauth_providers      :  {_c(_oauth_status, '32' if OAUTH_PROVIDERS_RAW.strip().lower() != 'none' else '33')}")
+    print(f"  use_pre_commit       :  {_c(_pre_commit_status, '32' if USE_PRE_COMMIT == 'yes' else '33')}")
+    print(_c("─" * 64, "90"))
+
+    # ── Sub-step 1: chat domain (largest removal) ─────────────────────────────
+    cleanup_chat_domain()
+
+    # ── Sub-step 2: OAuth provider adapters ───────────────────────────────────
+    cleanup_oauth_providers()
+
+    # ── Sub-step 3: pre-commit configuration file ─────────────────────────────
+    cleanup_pre_commit()
+
+    _log.debug("cleanup_optional_modules: all sub-steps complete.")
 
 
 # ---------------------------------------------------------------------------
@@ -217,55 +341,106 @@ def setup_env_file() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Step 5 — Dependency installation (uv sync)
+# Step 5 — Virtual environment + dependency installation (uv venv + uv sync)
 # ---------------------------------------------------------------------------
 
-def run_uv_sync() -> None:
-    """Install all project dependencies into the local .venv via ``uv sync``.
+def run_uv_init() -> None:
+    """Create a virtual environment and install all project dependencies.
+
+    Steps
+    -----
+    1. Locate ``uv`` on PATH.  If absent → print installation guidance and
+       return.  Project generation continues without a venv.
+    2. ``uv venv`` — create a ``.venv/`` virtual environment in PROJECT_ROOT.
+    3. ``uv sync``  — resolve and install all declared dependencies into
+       ``.venv/``.
 
     Behaviour
     ---------
-    * If *uv* is not on PATH → warn and skip.  Project generation continues.
-    * If ``uv sync`` exits non-zero → warn and continue.
-    * stdout/stderr are streamed to the terminal in real-time so the user
-      can see download progress and identify any errors immediately.
+    * Both sub-commands stream stdout/stderr directly to the terminal so
+      the developer sees download progress and any errors in real-time.
+    * A non-zero exit from either command prints a clear recovery command
+      and returns early — it never aborts project generation.
+    * The ``COOKIECUTTER_SKIP_HEAVY_OPS`` guard is applied in ``main()``;
+      this function does not check it.
 
-    Why run this in the hook?
+    Why run both in the hook?
     -------------------------
-    Running ``uv sync`` here means that ``make dev`` (which calls ``uvicorn``
-    via ``uv run``) works immediately without an extra manual step, satisfying
-    the "boot in < 60 seconds" DX requirement.
+    Running ``uv venv && uv sync`` here means ``make dev`` (which calls
+    ``uvicorn`` via ``uv run``) works immediately without any extra manual
+    step, satisfying the "boot in < 60 seconds" DX requirement.
     """
-    print("\n[step 5/6] Installing dependencies via uv sync …")
-    print("  (First run may take 30–90 s while packages are downloaded)")
+    print("\n[step 5/6] Initialising virtual environment and installing dependencies …")
+    _log.debug("run_uv_init: starting — project_root=%s", PROJECT_ROOT)
 
+    # ── 1. Locate uv ─────────────────────────────────────────────────────────
     uv_bin: str | None = shutil.which("uv")
     if uv_bin is None:
-        print(_warn("uv not found on PATH — skipping dependency installation."))
+        print(_warn("uv not found on PATH — skipping venv creation and dependency installation."))
         print(_warn("Install uv:  https://docs.astral.sh/uv/getting-started/installation/"))
-        print(_warn("Then run:    uv sync   (inside the project directory)"))
+        print(_warn("Then run the following inside the project directory:"))
+        print(_warn("    uv venv && uv sync"))
+        _log.warning("run_uv_init: uv not on PATH — skipped.")
         return
 
+    _log.debug("run_uv_init: found uv at %s", uv_bin)
+
+    # ── 2. uv venv ───────────────────────────────────────────────────────────
+    print("  Creating .venv …  (uv venv)")
     try:
-        result = subprocess.run(
-            [uv_bin, "sync"],
+        venv_result = subprocess.run(
+            [uv_bin, "venv"],
             cwd=PROJECT_ROOT,
             check=False,
-            # Stream output directly; do NOT capture — let the user see progress
+            # Stream output directly — let the user see creation messages.
             stdout=None,
             stderr=None,
         )
     except OSError as exc:
-        print(_warn(f"Failed to invoke uv: {exc}"))
-        print(_warn("Run `uv sync` manually to install dependencies."))
+        print(_warn(f"Failed to invoke `uv venv`: {exc}"))
+        print(_warn("Create the virtual environment manually, then install deps:"))
+        print(_warn("    uv venv && uv sync"))
+        _log.error("run_uv_init: OSError during uv venv: %s", exc)
         return
 
-    if result.returncode == 0:
+    if venv_result.returncode != 0:
+        print(_warn(f"`uv venv` exited with code {venv_result.returncode}."))
+        print(_warn("Review the output above.  Recovery:"))
+        print(_warn("    uv venv && uv sync"))
+        _log.error("run_uv_init: uv venv failed with exit code %d", venv_result.returncode)
+        return
+
+    print(_ok(".venv created successfully."))
+    _log.debug("run_uv_init: uv venv succeeded.")
+
+    # ── 3. uv sync ───────────────────────────────────────────────────────────
+    print("  Installing dependencies …  (uv sync)")
+    print("  (First run may take 30–90 s while packages are downloaded)")
+    try:
+        sync_result = subprocess.run(
+            [uv_bin, "sync"],
+            cwd=PROJECT_ROOT,
+            check=False,
+            # Stream output directly — let the user see download progress.
+            stdout=None,
+            stderr=None,
+        )
+    except OSError as exc:
+        print(_warn(f"Failed to invoke `uv sync`: {exc}"))
+        print(_warn("Install dependencies manually:"))
+        print(_warn("    uv sync"))
+        _log.error("run_uv_init: OSError during uv sync: %s", exc)
+        return
+
+    if sync_result.returncode == 0:
         print(_ok("uv sync completed — .venv is ready."))
         print(_ok(".venv/ is excluded from git via .gitignore."))
+        _log.debug("run_uv_init: uv sync succeeded.")
     else:
-        print(_warn(f"uv sync exited with code {result.returncode}."))
-        print(_warn("Review the output above, then run `uv sync` manually to retry."))
+        print(_warn(f"`uv sync` exited with code {sync_result.returncode}."))
+        print(_warn("Review the output above, then retry manually:"))
+        print(_warn("    uv sync"))
+        _log.error("run_uv_init: uv sync failed with exit code %d", sync_result.returncode)
 
 
 # ---------------------------------------------------------------------------
@@ -656,17 +831,67 @@ def ensure_script_permissions() -> None:
             print(_warn(f"Run manually:  chmod +x scripts/{script.name}"))
 
 
+def main() -> int:
+    """Run all post-generation hook steps.
+
+    This is the canonical entry point for the Cookiecutter post-generation hook.
+    Each step is called in order; if any step raises an unexpected exception it
+    is caught here, reported to the user, and the hook exits with code 1 so that
+    Cookiecutter surfaces the failure clearly.
+
+    Returns
+    -------
+    int
+        0  — all steps completed successfully.
+        1  — an unexpected (unhandled) exception occurred.
+        130 — interrupted by the user (Ctrl-C / SIGINT).
+    """
+    _log.debug(
+        "Post-generation hook started. project_root=%s package=%s chat=%s oauth=%s",
+        PROJECT_ROOT,
+        PACKAGE_NAME,
+        INCLUDE_CHAT_DOMAIN,
+        OAUTH_PROVIDERS_RAW,
+    )
+
+    try:
+        cleanup_optional_modules()    # steps 1–3: chat domain, OAuth adapters, pre-commit
+        setup_env_file()              # step 4/6
+        ensure_script_permissions()   # always — ensure shell scripts are executable
+
+        if _SKIP_HEAVY_OPS:
+            print("\n[skip] COOKIECUTTER_SKIP_HEAVY_OPS=1 — skipping uv sync and git init.")
+            _log.info("Heavy ops skipped (COOKIECUTTER_SKIP_HEAVY_OPS=1).")
+        else:
+            run_uv_init()          # step 5/6 — uv venv + uv sync
+            init_git_repo()        # step 6/6
+
+        print_summary()
+
+    except KeyboardInterrupt:
+        # Ctrl-C while uv sync or git init is running — project files exist but
+        # post-processing was interrupted.  Return 130 (standard SIGINT exit code).
+        print()
+        print(_warn("Post-generation hook interrupted by the user (Ctrl-C)."))
+        print(_warn("Project files have been generated, but some setup steps may be incomplete."))
+        _log.warning("Hook interrupted by KeyboardInterrupt.")
+        return 130
+
+    except Exception as exc:  # noqa: BLE001
+        # Catch-all: surface unexpected errors without a raw traceback on stdout.
+        # The full traceback is emitted to stderr via _log.exception() so it is
+        # still accessible in CI logs / when stderr is captured.
+        print()
+        print(_warn(f"Unexpected error in post-generation hook: {exc}"))
+        print(_warn("Project files have been generated, but post-processing may be incomplete."))
+        print(_warn("Inspect the stderr output for the full traceback, then run the"))
+        print(_warn("individual steps manually (see the hook source for details)."))
+        _log.exception("Unhandled exception in post_gen_project hook.")
+        return 1
+
+    _log.debug("Post-generation hook finished successfully.")
+    return 0
+
+
 if __name__ == "__main__":
-    cleanup_chat_domain()         # step 1/6
-    cleanup_oauth_providers()     # step 2/6
-    cleanup_pre_commit()          # step 3/6
-    setup_env_file()              # step 4/6
-    ensure_script_permissions()   # always — ensure shell scripts are executable
-
-    if _SKIP_HEAVY_OPS:
-        print("\n[skip] COOKIECUTTER_SKIP_HEAVY_OPS=1 — skipping uv sync and git init.")
-    else:
-        run_uv_sync()          # step 5/6
-        init_git_repo()        # step 6/6
-
-    print_summary()
+    sys.exit(main())

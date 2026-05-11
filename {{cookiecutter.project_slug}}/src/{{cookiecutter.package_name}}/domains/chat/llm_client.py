@@ -1,29 +1,37 @@
 """LangChain LiteLLM client abstraction for the chat domain.
 
-Provides :class:`LLMClient` — a thin, provider-agnostic wrapper around
-:class:`langchain_litellm.ChatLiteLLM` that:
+Provides two public classes and one FastAPI dependency function:
 
-1. Sources its configuration from :class:`~{{ cookiecutter.package_name }}.core.config.LLMSettings`
-   via :class:`~{{ cookiecutter.package_name }}.domains.chat.llm_factory.ProviderFactory`.
-2. Exposes a clean async interface (``ainvoke`` / ``astream``).
-3. Registers a FastAPI dependency so routers receive a pre-configured client
-   via ``Depends(get_llm_client)``.
+* :class:`LLMClient` — a thin, provider-agnostic wrapper around
+  :class:`langchain_litellm.ChatLiteLLM` that satisfies
+  :class:`~{{ cookiecutter.package_name }}.domains.chat.ports.LLMClientProtocol`.
+
+* :class:`DefaultLLMClientFactory` — the production implementation of
+  :class:`~{{ cookiecutter.package_name }}.domains.chat.ports.LLMClientFactoryProtocol`.
+  Its single method ``get_llm_client()`` reads
+  :class:`~{{ cookiecutter.package_name }}.core.config.LLMSettings` and returns a
+  configured :class:`LLMClient`.
+
+* :func:`get_llm_client` — a module-level factory function (FastAPI
+  ``Depends``-compatible) that delegates to
+  :class:`DefaultLLMClientFactory`.
 
 Provider switching is transparent — change ``LLM_PROVIDER`` + the matching
 API key in ``.env``.  No application-code changes are required.
 
 Usage::
 
-    # In a FastAPI route
+    # In a FastAPI route — type-hint against the protocol, not the concrete class
     from fastapi import Depends
     from langchain_core.messages import HumanMessage, SystemMessage
 
-    from {{ cookiecutter.package_name }}.domains.chat.llm_client import LLMClient, get_llm_client
+    from {{ cookiecutter.package_name }}.domains.chat.llm_client import get_llm_client
+    from {{ cookiecutter.package_name }}.domains.chat.ports import LLMClientProtocol
 
     @router.post("/chat")
     async def chat_endpoint(
         body: ChatRequest,
-        llm: LLMClient = Depends(get_llm_client),
+        llm: LLMClientProtocol = Depends(get_llm_client),
     ) -> dict:
         messages = [
             SystemMessage(content="You are a helpful assistant."),
@@ -39,6 +47,14 @@ Usage::
         #     async for chunk in llm.astream(messages):
         #         yield {"data": chunk}
         # return EventSourceResponse(_gen())
+
+    # Inject via factory protocol for testing
+    from {{ cookiecutter.package_name }}.domains.chat.llm_client import DefaultLLMClientFactory
+    from {{ cookiecutter.package_name }}.domains.chat.ports import LLMClientFactoryProtocol
+    from {{ cookiecutter.package_name }}.domains.chat.service import ChatService
+
+    def build_service(factory: LLMClientFactoryProtocol = DefaultLLMClientFactory()):
+        return ChatService(llm_client=factory.get_llm_client())
 """
 
 from __future__ import annotations
@@ -239,16 +255,24 @@ def get_llm_client() -> LLMClient:
     from environment variables / ``.env`` file).  The client is constructed
     fresh per-request so that dynamic env changes in tests are picked up.
 
-    Usage::
+    This function delegates to :class:`DefaultLLMClientFactory` and is
+    kept as a module-level callable for backwards compatibility and for use
+    with ``Depends(get_llm_client)`` in routers.
+
+    The preferred type hint for the injected value is
+    :class:`~{{ cookiecutter.package_name }}.domains.chat.ports.LLMClientProtocol`, not the
+    concrete :class:`LLMClient`, so that tests can override with any
+    compatible mock without inheriting from the concrete class::
 
         from fastapi import APIRouter, Depends
-        from {{ cookiecutter.package_name }}.domains.chat.llm_client import LLMClient, get_llm_client
+        from {{ cookiecutter.package_name }}.domains.chat.llm_client import get_llm_client
+        from {{ cookiecutter.package_name }}.domains.chat.ports import LLMClientProtocol
 
         router = APIRouter()
 
         @router.post("/messages")
         async def create_message(
-            llm: LLMClient = Depends(get_llm_client),
+            llm: LLMClientProtocol = Depends(get_llm_client),
         ) -> dict:
             ...
 
@@ -257,11 +281,73 @@ def get_llm_client() -> LLMClient:
     In tests, override this dependency via ``app.dependency_overrides``::
 
         from unittest.mock import AsyncMock, MagicMock
-        from {{ cookiecutter.package_name }}.domains.chat.llm_client import LLMClient, get_llm_client
+        from {{ cookiecutter.package_name }}.domains.chat.llm_client import get_llm_client
+        from {{ cookiecutter.package_name }}.domains.chat.ports import LLMClientProtocol
 
-        mock_llm = MagicMock(spec=LLMClient)
+        mock_llm = MagicMock(spec=LLMClientProtocol)
         mock_llm.ainvoke = AsyncMock(return_value=AIMessage(content="mocked"))
         app.dependency_overrides[get_llm_client] = lambda: mock_llm
     """
-    app_settings = get_settings()
-    return LLMClient(settings=app_settings.llm)
+    return DefaultLLMClientFactory().get_llm_client()
+
+
+# ---------------------------------------------------------------------------
+# DefaultLLMClientFactory — concrete LLMClientFactoryProtocol implementation
+# ---------------------------------------------------------------------------
+
+
+class DefaultLLMClientFactory:
+    """Production implementation of :class:`~{{ cookiecutter.package_name }}.domains.chat.ports.LLMClientFactoryProtocol`.
+
+    Reads :class:`~{{ cookiecutter.package_name }}.core.config.LLMSettings` from the global
+    :class:`~{{ cookiecutter.package_name }}.core.config.Settings` singleton and constructs a
+    fully configured :class:`LLMClient` via ``get_llm_client()``.
+
+    This class satisfies :class:`~{{ cookiecutter.package_name }}.domains.chat.ports.LLMClientFactoryProtocol`
+    structurally (no explicit inheritance) — ``isinstance`` checks using
+    the ``@runtime_checkable`` protocol will pass.
+
+    Typical usage
+    -------------
+    *Production* — let FastAPI inject via ``Depends``::
+
+        from fastapi import Depends
+        from {{ cookiecutter.package_name }}.domains.chat.llm_client import DefaultLLMClientFactory, get_llm_client
+        from {{ cookiecutter.package_name }}.domains.chat.ports import LLMClientFactoryProtocol
+
+        def get_factory() -> LLMClientFactoryProtocol:
+            return DefaultLLMClientFactory()
+
+    *Testing* — inject a stub factory::
+
+        class StubFactory:
+            def get_llm_client(self):
+                mock = MagicMock(spec=LLMClientProtocol)
+                mock.ainvoke = AsyncMock(return_value=AIMessage(content="stub"))
+                return mock
+
+        service = ChatService(llm_client=StubFactory().get_llm_client())
+
+    Notes
+    -----
+    The factory creates a new :class:`LLMClient` on every ``get_llm_client()``
+    call so that runtime settings changes (e.g. during tests) are reflected
+    immediately.  Callers that need a long-lived client should cache the
+    returned instance themselves.
+    """
+
+    def get_llm_client(self) -> LLMClient:
+        """Return a :class:`LLMClient` configured from application settings.
+
+        Reads ``LLM_PROVIDER``, ``LLM_DEFAULT_MODEL``, and the corresponding
+        API-key environment variables via the cached :func:`get_settings`
+        singleton.
+
+        Returns
+        -------
+        LLMClient
+            A fully configured LLM client satisfying
+            :class:`~{{ cookiecutter.package_name }}.domains.chat.ports.LLMClientProtocol`.
+        """
+        app_settings = get_settings()
+        return LLMClient(settings=app_settings.llm)

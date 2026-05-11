@@ -84,10 +84,12 @@ _COMMON_REQUIRED: list[str] = [
     # 루트 설정 파일
     "pyproject.toml",
     "docker-compose.yml",
+    "Dockerfile",
     "Makefile",
     "README.md",
     "alembic.ini",
     ".env.example",
+    ".dockerignore",
     ".gitignore",
     # Alembic
     "alembic",
@@ -112,6 +114,29 @@ _COMMON_REQUIRED: list[str] = [
     "scripts/wait_for_services.sh",
     "scripts/wait_for_services.py",
 ]
+
+# Dockerfile 멀티스테이지 빌드 검증 — COPY --from 레이어 범위
+# runtime 스테이지가 dev 도구를 복사하지 않는지 정적으로 확인
+_DOCKERFILE_MULTISTAGE_CHECKS: dict[str, list[str]] = {
+    "Dockerfile": [
+        # 3개 스테이지 존재 확인
+        "AS uv-binary",
+        "AS builder",
+        "AS runtime",
+        # runtime COPY --from 허용 경로만 존재
+        "COPY --from=builder /runtime-venv /runtime-venv",
+        "COPY --from=builder /build/alembic/",
+        "COPY --from=builder /build/alembic.ini",
+        # builder에서 dev 패키지 격리
+        "--no-group dev",
+        "UV_SYSTEM_PYTHON=1",
+        # 보안 설정
+        "USER appuser",
+        "HEALTHCHECK",
+        # runtime에 slim 이미지 사용 (bookworm 기반)
+        "slim-bookworm AS runtime",
+    ],
+}
 
 # 기본 패키지 이름 (cookiecutter.json의 project_name → project_slug → package_name 변환)
 # "FastAPI Bootstrap" → "fastapi-bootstrap" → "fastapi_bootstrap"
@@ -188,6 +213,13 @@ SCENARIOS: list[Scenario] = [
                 "ruff",
                 "mypy",
             ],
+            # ── Dockerfile 멀티스테이지 빌드 구조 검증 (Sub-AC 3.1) ──────────────
+            # runtime 스테이지가 builder의 dev 도구를 복사하지 않는지 확인:
+            #   • 3개 스테이지(uv-binary / builder / runtime) 존재
+            #   • runtime COPY --from 경로가 /runtime-venv + alembic 만
+            #   • uv sync --no-group dev 로 /runtime-venv 생성
+            #   • non-root USER + HEALTHCHECK 설정
+            **_DOCKERFILE_MULTISTAGE_CHECKS,
         },
     ),
 
@@ -207,13 +239,21 @@ SCENARIOS: list[Scenario] = [
             "tests/chat",
             "tests/chat/__init__.py",
         ],
-        content_contains={},
+        content_contains={
+            # Dockerfile 멀티스테이지 구조는 chat 토글에 무관하게 동일해야 함
+            # (Dockerfile은 Jinja2 conditional 없이 정적으로 동일한 3스테이지 구조 유지)
+            **_DOCKERFILE_MULTISTAGE_CHECKS,
+        },
         content_excludes={
             "pyproject.toml": [
                 "langchain",
                 "langchain-litellm",
                 "litellm",
             ],
+            # NOTE: Dockerfile에는 langchain 미포함 검사를 하지 않음.
+            #       Dockerfile은 chat 토글을 위한 Jinja2 conditional 블록이 없고,
+            #       "langchain" 단어가 주석에서 옵션 설명으로 등장하기 때문입니다.
+            #       LLM 의존성 제거는 pyproject.toml에서 Jinja2 conditional로 처리됩니다.
         },
     ),
 
@@ -509,15 +549,23 @@ def validate_scenario(scenario: Scenario, tmp_root: Path) -> tuple[int, int]:
         traceback.print_exc()
         return 0, 1
 
-    # 실제 패키지명 파악 (pyproject.toml에서 name 필드 추출)
-    pyproject = project_dir / "pyproject.toml"
+    # 실제 패키지명 파악 (src/ 디렉터리에서 직접 탐색 — pyproject.toml의 name 필드는
+    # hyphens 를 사용하지만 Python 패키지 디렉터리명은 underscores 를 사용한다.
+    # 예: name = "fastapi-bootstrap" → src/fastapi_bootstrap/
     pkg_name = _DEFAULT_PKG
-    if pyproject.exists():
-        content = pyproject.read_text()
+    src_dir = project_dir / "src"
+    if src_dir.is_dir():
+        pkg_dirs = [d for d in src_dir.iterdir() if d.is_dir() and not d.name.startswith(".")]
+        if pkg_dirs:
+            pkg_name = pkg_dirs[0].name   # 첫 번째 패키지 디렉터리 사용
+    elif (project_dir / "pyproject.toml").exists():
+        # fallback: pyproject.toml의 name 필드에서 추출하고 hyphens → underscores 변환
+        content = (project_dir / "pyproject.toml").read_text()
         for line in content.splitlines():
             stripped = line.strip()
             if stripped.startswith("name") and "=" in stripped:
-                pkg_name = stripped.split("=", 1)[1].strip().strip('"').strip("'")
+                raw_name = stripped.split("=", 1)[1].strip().strip('"').strip("'")
+                pkg_name = raw_name.replace("-", "_")
                 break
 
     print(f"  {_c('[정보]', '90')} 생성된 프로젝트: {project_dir.name}  (패키지: {pkg_name})")

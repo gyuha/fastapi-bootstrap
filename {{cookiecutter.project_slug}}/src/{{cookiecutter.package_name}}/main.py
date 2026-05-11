@@ -13,8 +13,11 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 import structlog
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from {{ cookiecutter.package_name }}.core.config import settings
 from {{ cookiecutter.package_name }}.core.exceptions import register_exception_handlers
@@ -66,6 +69,19 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
 # ---------------------------------------------------------------------------
 
 
+def _get_user_key(request: Request) -> str:
+    """Rate-limit key: use authenticated user ID if available, else remote IP."""
+    # Try to extract user from request state (set by auth middleware / dependency)
+    user = getattr(request.state, "user", None)
+    if user is not None and hasattr(user, "id"):
+        return f"user:{user.id}"
+    return get_remote_address(request)
+
+
+#: Shared Limiter instance — routers import this to apply per-route limits.
+limiter = Limiter(key_func=_get_user_key)
+
+
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     application = FastAPI(
@@ -78,6 +94,10 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # ── Rate limiter state ────────────────────────────────────────────────────
+    application.state.limiter = limiter
+    application.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
+
     # ── Middleware (outermost to innermost) ───────────────────────────────────
     # 1. Correlation-ID header injection + structlog context binding
     application.add_middleware(CorrelationIdMiddleware)
@@ -85,7 +105,7 @@ def create_app() -> FastAPI:
     # 2. CORS
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins,
+        allow_origins=settings.cors_origins_list,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
@@ -119,6 +139,30 @@ def _register_routers(application: FastAPI) -> None:
             {"status": "ok", "env": "development"}
         """
         return {"status": "ok", "env": settings.app_env.value}
+
+    @health_router.get("/ready", summary="Readiness check")
+    async def ready() -> dict[str, str]:
+        """Return service readiness — verifies DB and Redis are reachable.
+
+        Returns 200 when all dependencies respond; 503 if any are unavailable.
+        Used by k8s readiness probes and smoke tests.
+        """
+        from fastapi import Response  # noqa: PLC0415
+
+        checks: dict[str, str] = {}
+
+        # Redis check
+        try:
+            from {{ cookiecutter.package_name }}.core.redis import get_redis_client  # noqa: PLC0415
+
+            redis = await get_redis_client()
+            await redis.ping()
+            checks["redis"] = "ok"
+        except Exception as exc:  # noqa: BLE001
+            checks["redis"] = f"error: {exc}"
+
+        all_ok = all(v == "ok" for v in checks.values())
+        return {"status": "ready" if all_ok else "degraded", **checks}
 
     application.include_router(health_router)
 

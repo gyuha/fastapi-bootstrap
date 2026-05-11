@@ -44,7 +44,7 @@ UVPYTHON    := uv run python
         migrate revision downgrade \
         smoke-test smoke-test-no-chat smoke-test-skip-verify \
         clean clean-docker \
-        {% if cookiecutter.use_pre_commit == "yes" %}pre-commit-install pre-commit-run{% endif %}
+        {% if cookiecutter.use_pre_commit == "yes" %}pre-commit-install pre-commit-run pre-commit-update secrets-baseline{% endif %}
 
 # ── Help ──────────────────────────────────────────────────────────────────────
 help: ## Show this help message
@@ -171,6 +171,17 @@ pre-commit-run: ## Run all pre-commit hooks on every file (CI / one-off audit)
 
 pre-commit-update: ## Update all pre-commit hook revisions to latest
 	$(UV) pre-commit autoupdate
+
+# Regenerate the detect-secrets baseline from scratch.
+# Run this whenever you intentionally add new placeholder secrets to source
+# files, or after the first clone when the baseline needs to be refreshed.
+#   Usage: make secrets-baseline
+secrets-baseline: ## Regenerate .secrets.baseline (detect-secrets full scan)
+	$(UV) detect-secrets scan \
+		--exclude-files '\.env\.example' \
+		--exclude-files '\.secrets\.baseline' \
+		> .secrets.baseline
+	@echo "✅  .secrets.baseline updated — review changes with: git diff .secrets.baseline"
 {% endif %}
 
 # ── Clean ─────────────────────────────────────────────────────────────────────

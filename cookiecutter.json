@@ -5,40 +5,77 @@
   "project_description": "Production-grade FastAPI backend with auth (JWT+OAuth+RBAC) and LLM chat proxy domains.",
   "author_name": "Your Name",
   "author_email": "you@example.com",
-  "python_version": "3.12",
+
+  "python_version": ["3.12", "3.13"],
+
   "fastapi_host": "0.0.0.0",
   "fastapi_port": "8000",
+
   "postgres_host": "localhost",
   "postgres_port": "5432",
   "postgres_user": "app",
   "postgres_password": "app",
   "postgres_db": "{{ cookiecutter.package_name }}_db",
+
   "redis_host": "localhost",
   "redis_port": "6379",
   "redis_db": "0",
+
   "mailpit_smtp_port": "1025",
   "mailpit_ui_port": "8025",
+
   "jwt_access_ttl_minutes": "15",
   "jwt_refresh_ttl_days": "7",
+
   "include_chat_domain": ["yes", "no"],
   "llm_provider": ["openai", "anthropic", "gemini", "azure", "ollama"],
   "llm_default_model": "gpt-4o-mini",
-  "oauth_providers": ["google,kakao,naver", "google", "kakao", "naver", "google,kakao", "google,naver", "kakao,naver", "none"],
+
+  "oauth_providers": [
+    "google,kakao,naver",
+    "google",
+    "kakao",
+    "naver",
+    "google,kakao",
+    "google,naver",
+    "kakao,naver",
+    "none"
+  ],
+
   "use_pre_commit": ["yes", "no"],
   "license": ["MIT", "Apache-2.0", "Proprietary"],
+
   "_copy_without_render": [
     "*.j2"
   ],
+
   "__prompts__": {
-    "project_name": "Human-readable project name",
-    "project_slug": "Slug used for repo / docker-compose project (auto-derived)",
-    "package_name": "Python package name under src/ (auto-derived)",
-    "python_version": "Python version (>= 3.12 required)",
-    "postgres_db": "PostgreSQL database name",
-    "include_chat_domain": "Include LangChain + langchain-litellm chat proxy domain?",
-    "llm_provider": "Default LLM provider for chat domain (ignored if chat domain disabled)",
-    "oauth_providers": "Comma-separated OAuth providers to scaffold (others are removed post-gen)",
-    "use_pre_commit": "Install pre-commit hooks (ruff + mypy)?",
+    "project_name": "Human-readable project name (e.g. 'My Awesome API')",
+    "project_slug": "URL/repo slug (auto-derived from project_name — leave blank to accept)",
+    "package_name": "Python package name under src/ (auto-derived from project_slug — leave blank to accept)",
+    "project_description": "One-line description of the project",
+    "author_name": "Primary author / team name",
+    "author_email": "Author contact email",
+    "python_version": "Python version (3.12 or 3.13 required — both are >= 3.12)",
+    "fastapi_host": "Host address the FastAPI Uvicorn process binds to",
+    "fastapi_port": "TCP port the FastAPI Uvicorn process listens on",
+    "postgres_host": "PostgreSQL host (use 'localhost' when running app on host)",
+    "postgres_port": "PostgreSQL port",
+    "postgres_user": "PostgreSQL application user",
+    "postgres_password": "PostgreSQL application password (override via env in prod)",
+    "postgres_db": "PostgreSQL database name (auto-derived from package_name)",
+    "redis_host": "Redis host (use 'localhost' when running app on host)",
+    "redis_port": "Redis port",
+    "redis_db": "Redis database index (0-15)",
+    "mailpit_smtp_port": "Mailpit SMTP port for local dev email capture",
+    "mailpit_ui_port": "Mailpit Web UI port",
+    "jwt_access_ttl_minutes": "Access token TTL in minutes (default: 15)",
+    "jwt_refresh_ttl_days": "Refresh token TTL in days (default: 7) — rotation + reuse detection enabled",
+    "include_chat_domain": "Scaffold the LangChain + langchain-litellm LLM chat proxy domain?",
+    "llm_provider": "Default LLM provider adapter (ignored when include_chat_domain=no)",
+    "llm_default_model": "Default model name for the selected LLM provider",
+    "oauth_providers": "OAuth2 social login providers to scaffold (comma-separated; unselected adapters are removed post-gen)",
+    "use_pre_commit": "Install pre-commit hooks (ruff + mypy + conventional-commits)?",
     "license": "Project license"
   }
 }

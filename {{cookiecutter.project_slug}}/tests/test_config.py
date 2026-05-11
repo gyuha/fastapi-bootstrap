@@ -82,9 +82,16 @@ class TestAppSettings:
 
     def test_cors_origins_from_comma_string(self) -> None:
         s = make_settings(CORS_ORIGINS="http://a.com,http://b.com, http://c.com")
-        assert "http://a.com" in s.cors_origins
-        assert "http://b.com" in s.cors_origins
-        assert "http://c.com" in s.cors_origins
+        origins = s.cors_origins_list
+        assert "http://a.com" in origins
+        assert "http://b.com" in origins
+        assert "http://c.com" in origins
+
+    def test_cors_origins_from_json_array(self) -> None:
+        s = make_settings(CORS_ORIGINS='["http://a.com","http://b.com"]')
+        origins = s.cors_origins_list
+        assert "http://a.com" in origins
+        assert "http://b.com" in origins
 
     def test_log_level_uppercased(self) -> None:
         s = make_settings(LOG_LEVEL="debug")
@@ -169,6 +176,190 @@ class TestJWTSettings:
         )
         assert s.jwt_access_token_expire_minutes == 30
         assert s.jwt_refresh_token_expire_days == 14
+
+
+# ---------------------------------------------------------------------------
+# Email / SMTP settings
+# ---------------------------------------------------------------------------
+
+
+class TestEmailSettings:
+    """Verify SMTP defaults match Mailpit dev configuration and can be overridden."""
+
+    def test_defaults_match_mailpit(self) -> None:
+        """Default email settings point to Mailpit on localhost."""
+        s = Settings(_env_file=None)  # type: ignore[call-arg]
+        assert s.mail_server == "localhost"
+        assert s.mail_port == {{ cookiecutter.mailpit_smtp_port }}
+        assert s.mail_starttls is False
+        assert s.mail_ssl_tls is False
+        assert s.mail_username == ""
+        # Mailpit accepts anonymous SMTP — no credentials needed in dev
+        assert s.mail_password.get_secret_value() == ""
+
+    def test_mail_from_uses_project_slug(self) -> None:
+        s = Settings(_env_file=None)  # type: ignore[call-arg]
+        assert "{{ cookiecutter.project_slug }}" in s.mail_from
+        assert s.mail_from_name == "{{ cookiecutter.project_name }}"
+
+    def test_production_smtp_override(self) -> None:
+        """Production SMTP credentials can be set via environment variables."""
+        s = make_settings(
+            MAIL_SERVER="smtp.sendgrid.net",
+            MAIL_PORT="587",
+            MAIL_USERNAME="apikey",
+            MAIL_PASSWORD="SG.test-api-key",  # noqa: S106
+            MAIL_FROM="no-reply@example.com",
+            MAIL_FROM_NAME="Example App",
+            MAIL_STARTTLS="true",
+            MAIL_SSL_TLS="false",
+        )
+        assert s.mail_server == "smtp.sendgrid.net"
+        assert s.mail_port == 587
+        assert s.mail_username == "apikey"
+        assert s.mail_password.get_secret_value() == "SG.test-api-key"
+        assert s.mail_from == "no-reply@example.com"
+        assert s.mail_from_name == "Example App"
+        assert s.mail_starttls is True
+        assert s.mail_ssl_tls is False
+
+    def test_mail_connection_config_dev_defaults(self) -> None:
+        """mail_connection_config returns correct kwargs for Mailpit (dev)."""
+        s = Settings(_env_file=None)  # type: ignore[call-arg]
+        cfg = s.mail_connection_config
+
+        assert cfg["MAIL_SERVER"] == "localhost"
+        assert cfg["MAIL_PORT"] == {{ cookiecutter.mailpit_smtp_port }}
+        assert cfg["MAIL_STARTTLS"] is False
+        assert cfg["MAIL_SSL_TLS"] is False
+        # No credentials → USE_CREDENTIALS must be False for Mailpit
+        assert cfg["USE_CREDENTIALS"] is False
+        # No TLS → cert validation disabled
+        assert cfg["VALIDATE_CERTS"] is False
+
+    def test_mail_connection_config_production(self) -> None:
+        """mail_connection_config enables credentials and cert validation for TLS."""
+        s = make_settings(
+            MAIL_SERVER="smtp.example.com",
+            MAIL_PORT="587",
+            MAIL_USERNAME="user@example.com",
+            MAIL_PASSWORD="secret",  # noqa: S106
+            MAIL_STARTTLS="true",
+            MAIL_SSL_TLS="false",
+        )
+        cfg = s.mail_connection_config
+
+        assert cfg["MAIL_SERVER"] == "smtp.example.com"
+        assert cfg["MAIL_PORT"] == 587
+        # Username is set → credentials required
+        assert cfg["USE_CREDENTIALS"] is True
+        # STARTTLS enabled → validate certs
+        assert cfg["VALIDATE_CERTS"] is True
+        assert cfg["MAIL_PASSWORD"] == "secret"
+
+    def test_mail_connection_config_keys(self) -> None:
+        """mail_connection_config contains all keys required by fastapi-mail."""
+        s = Settings(_env_file=None)  # type: ignore[call-arg]
+        cfg = s.mail_connection_config
+        required_keys = {
+            "MAIL_USERNAME",
+            "MAIL_PASSWORD",
+            "MAIL_FROM",
+            "MAIL_PORT",
+            "MAIL_SERVER",
+            "MAIL_FROM_NAME",
+            "MAIL_STARTTLS",
+            "MAIL_SSL_TLS",
+            "USE_CREDENTIALS",
+            "VALIDATE_CERTS",
+        }
+        assert required_keys.issubset(cfg.keys())
+
+    def test_container_mail_server_override(self) -> None:
+        """Inside docker-compose the app service sets MAIL_SERVER=mailpit."""
+        s = make_settings(MAIL_SERVER="mailpit", MAIL_PORT="1025")
+        assert s.mail_server == "mailpit"
+        assert s.mail_connection_config["MAIL_SERVER"] == "mailpit"
+
+
+# ---------------------------------------------------------------------------
+# Container connectivity — host vs docker-compose service names
+# ---------------------------------------------------------------------------
+
+
+class TestContainerConnectivity:
+    """Verify that host/URL settings can be overridden for container-to-container networking.
+
+    In local dev the FastAPI app runs on the *host* machine, so it uses
+    ``localhost`` to reach the containers.  In full-docker mode (``--profile app``)
+    the app runs *inside* the compose network and must use the container service
+    names (``postgres``, ``redis``, ``mailpit``) as hostnames.  These tests
+    verify that environment variable overrides compose correctly with or without
+    the full DSN shortcuts.
+    """
+
+    def test_postgres_host_override_for_container(self) -> None:
+        """Setting POSTGRES_HOST=postgres uses the container service name in DSN."""
+        s = make_settings(
+            POSTGRES_HOST="postgres",
+            POSTGRES_USER="app",
+            POSTGRES_PASSWORD="app",  # noqa: S106
+            POSTGRES_PORT="5432",
+            POSTGRES_DB="{{ cookiecutter.postgres_db }}",
+        )
+        url = s.async_database_url
+        assert "postgres:5432" in url
+        assert url.startswith("postgresql+asyncpg://")
+
+    def test_redis_host_override_for_container(self) -> None:
+        """Setting REDIS_HOST=redis uses the container service name in DSN."""
+        s = make_settings(REDIS_HOST="redis", REDIS_PORT="{{ cookiecutter.redis_port }}", REDIS_DB="0")
+        assert s.redis_dsn == "redis://redis:{{ cookiecutter.redis_port }}/0"
+
+    def test_full_database_url_overrides_component_vars(self) -> None:
+        """Explicit DATABASE_URL takes precedence over POSTGRES_* component vars.
+
+        This is how docker-compose overrides the URL for the ``app`` profile:
+        it sets DATABASE_URL with the container hostname directly.
+        """
+        container_url = (
+            "postgresql+asyncpg://app:app@postgres:5432/{{ cookiecutter.postgres_db }}"
+        )
+        s = make_settings(
+            DATABASE_URL=container_url,
+            POSTGRES_HOST="localhost",  # would be wrong — but overridden by DATABASE_URL
+        )
+        assert s.async_database_url == container_url
+
+    def test_full_redis_url_overrides_component_vars(self) -> None:
+        """Explicit REDIS_URL takes precedence over REDIS_* component vars."""
+        container_url = "redis://redis:6379/0"
+        s = make_settings(
+            REDIS_URL=container_url,
+            REDIS_HOST="localhost",  # would be wrong — but overridden by REDIS_URL
+        )
+        assert s.redis_dsn == container_url
+
+    def test_sync_database_url_for_alembic_container(self) -> None:
+        """DATABASE_URL_SYNC produces a psycopg2 DSN for Alembic in container mode."""
+        container_sync_url = (
+            "postgresql+psycopg2://app:app@postgres:5432/{{ cookiecutter.postgres_db }}"
+        )
+        s = make_settings(DATABASE_URL_SYNC=container_sync_url)
+        assert s.sync_database_url == container_sync_url
+        assert "psycopg2" in s.sync_database_url
+        # Alembic must never get an asyncpg DSN
+        assert "asyncpg" not in s.sync_database_url
+
+    def test_default_host_is_localhost(self) -> None:
+        """Default configuration targets localhost (host-to-container dev mode)."""
+        s = Settings(_env_file=None)  # type: ignore[call-arg]
+        assert s.postgres_host == "{{ cookiecutter.postgres_host }}"
+        assert s.redis_host == "{{ cookiecutter.redis_host }}"
+        assert s.mail_server == "localhost"
+        # Async DSN should contain localhost
+        assert "{{ cookiecutter.postgres_host }}" in s.async_database_url
+        assert "{{ cookiecutter.redis_host }}" in s.redis_dsn
 
 
 {% if cookiecutter.include_chat_domain == "yes" %}

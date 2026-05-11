@@ -1,0 +1,32 @@
+{
+  "_comment": "시나리오: 기본값 — chat 도메인 포함, google+kakao+naver OAuth, pre-commit 포함",
+  "cookiecutter": {
+    "project_name": "FastAPI Bootstrap",
+    "project_slug": "fastapi-bootstrap",
+    "package_name": "fastapi_bootstrap",
+    "project_description": "Production-grade FastAPI backend with auth (JWT+OAuth+RBAC) and LLM chat proxy domains.",
+    "author_name": "Your Name",
+    "author_email": "you@example.com",
+    "python_version": "3.12",
+    "fastapi_host": "0.0.0.0",
+    "fastapi_port": "8000",
+    "postgres_host": "localhost",
+    "postgres_port": "5432",
+    "postgres_user": "app",
+    "postgres_password": "app",
+    "postgres_db": "fastapi_bootstrap_db",
+    "redis_host": "localhost",
+    "redis_port": "6379",
+    "redis_db": "0",
+    "mailpit_smtp_port": "1025",
+    "mailpit_ui_port": "8025",
+    "jwt_access_ttl_minutes": "15",
+    "jwt_refresh_ttl_days": "7",
+    "include_chat_domain": "yes",
+    "llm_provider": "openai",
+    "llm_default_model": "gpt-4o-mini",
+    "oauth_providers": "google,kakao,naver",
+    "use_pre_commit": "yes",
+    "license": "MIT"
+  }
+}
