@@ -10,6 +10,38 @@
 
 ---
 
+## ⚡ 빠른 시작 (TL;DR — 1분 부팅)
+
+사전 요구사항만 갖춰지면 **한 명령어**로 전체 스택이 기동됩니다.
+
+```bash
+# 필수 도구: Docker Desktop + uv (없다면 아래 사전 요구사항 섹션 참조)
+
+make dev
+```
+
+내부 동작 순서:
+1. `uv sync` — Python 의존성 설치 (`.venv` 생성)
+2. `docker compose up -d` — PostgreSQL · Redis · Mailpit 컨테이너 기동 + healthy 대기
+3. `uv run alembic upgrade head` — DB 스키마 마이그레이션
+4. `uv run uvicorn --reload` — FastAPI 개발 서버 시작
+
+기동 후 확인:
+
+```bash
+curl http://localhost:{{ cookiecutter.fastapi_port }}/health
+# → {"status": "ok", "env": "development"}
+```
+
+| 서비스 | URL |
+|--------|-----|
+| **Swagger UI** | http://localhost:{{ cookiecutter.fastapi_port }}/docs |
+| **ReDoc** | http://localhost:{{ cookiecutter.fastapi_port }}/redoc |
+| **Health** | http://localhost:{{ cookiecutter.fastapi_port }}/health |
+| **Mailpit** (개발 메일함) | http://localhost:{{ cookiecutter.mailpit_ui_port }} |
+
+---
+
 ## 목차
 
 - [프로젝트 목적](#프로젝트-목적)
@@ -22,6 +54,7 @@
 - [테스트 실행](#테스트-실행)
 - [코드 품질 도구](#코드-품질-도구)
 - [DB 마이그레이션](#db-마이그레이션)
+- [로깅](#로깅)
 
 ---
 
@@ -102,33 +135,164 @@
 
 ## 아키텍처
 
-```
-Light Modular Monolith (DDD)
-└─ 각 도메인은 자기 완결적 구조를 가집니다 (router / service / repository / models / schemas)
-└─ 도메인 간 직접 DB 모델 import 금지 — 인터페이스 또는 이벤트를 통해 통신
-```
+**Light Modular Monolith (DDD)** 구조를 채택합니다.
+각 도메인은 `domains/<bc>/` 하위에 `router / service / repository / models / schemas` 파일을 갖는 자기 완결적 구조이며, 도메인 간 직접 DB 모델 import는 금지됩니다.
 
 ```
-클라이언트
-    │
-    ├─ POST /api/v1/auth/...     ← Auth 도메인
-    │       JWT Bearer 인증
-    │       OAuth 소셜 로그인
-    │       RBAC 권한 체크
-    │
+domains/
+├── auth/            ← 인증·인가 도메인 (JWT + OAuth + RBAC)
+│   ├── router.py    /api/v1/auth/...
+│   ├── service.py
+│   ├── repository.py
+│   ├── models.py    User, Role, Permission, RefreshToken ...
+│   ├── schemas.py
+│   ├── permissions.py   require_permission() 데코레이터
+│   └── oauth/       소셜 로그인 어댑터 (프로바이더별 파일)
 {% if cookiecutter.include_chat_domain == "yes" %}
-    ├─ POST /api/v1/chat/...     ← Chat 도메인 (SSE 스트리밍)
-    │       LangChain → litellm → {{ cookiecutter.llm_provider }}
-    │
+└── chat/            ← LLM 채팅 프록시 도메인
+    ├── router.py    /api/v1/chat/... (SSE 스트리밍)
+    ├── service.py   LangChain runnable 오케스트레이션
+    ├── repository.py   Conversation / Message DB 쿼리
+    ├── models.py    Conversation, Message
+    └── schemas.py
 {% endif %}
-    └─ GET  /health              ← 헬스체크
 ```
 
-**JWT 전략**
+### 요청 흐름 (Request Flow)
 
-- Access Token: `Authorization: Bearer <token>` 헤더 전용 (TTL {{ cookiecutter.jwt_access_ttl_minutes }}분)
-- Refresh Token: TTL {{ cookiecutter.jwt_refresh_ttl_days }}일, rotation + reuse detection 적용
-- Blacklist: Redis `jti` 기반 (로그아웃·재사용 감지 시 즉시 폐기)
+각 계층에서 도메인별로 분기되어 처리되는 흐름입니다. 미들웨어가 모든 요청에 `correlation_id`를 부여하고 structlog JSON으로 기록합니다.
+
+```mermaid
+flowchart TD
+    Client(["🌐 클라이언트"])
+
+    subgraph middleware["미들웨어 체인"]
+        CID["CorrelationId 미들웨어\n(X-Correlation-ID 주입)"]
+        CORS["CORS 미들웨어"]
+    end
+
+    subgraph domains["도메인 라우터 /api/v1/..."]
+        Auth["🔐 Auth Domain\n/auth/signup\n/auth/login\n/auth/refresh\n/auth/logout\n/auth/me\n/auth/oauth/..."]
+{% if cookiecutter.include_chat_domain == "yes" %}
+        Chat["💬 Chat Domain\n/chat/conversations\n/chat/conversations/{id}/messages\n(SSE 스트리밍)"]
+{% endif %}
+        Health["❤️ GET /health"]
+    end
+
+    subgraph infra["인프라"]
+        DB[("🐘 PostgreSQL\n:{{ cookiecutter.postgres_port }}")]
+        Redis[("🔴 Redis\n:{{ cookiecutter.redis_port }}\nJWT blacklist\nOAuth state\nRate limit")]
+        Mail["📧 Mailpit/SMTP\n:{{ cookiecutter.mailpit_smtp_port }}"]
+{% if cookiecutter.include_chat_domain == "yes" %}
+        LLM["🤖 LLM Provider\n{{ cookiecutter.llm_provider }}\n(via litellm)"]
+{% endif %}
+    end
+
+    Client -->|"Authorization: Bearer"| CID
+    CID --> CORS
+    CORS --> Auth
+    CORS --> Health
+{% if cookiecutter.include_chat_domain == "yes" %}
+    CORS --> Chat
+{% endif %}
+
+    Auth --> DB
+    Auth --> Redis
+    Auth --> Mail
+{% if cookiecutter.include_chat_domain == "yes" %}
+    Chat --> DB
+    Chat --> Redis
+    Chat -->|"LangChain + litellm"| LLM
+{% endif %}
+
+    style Auth fill:#1565C0,color:#fff
+{% if cookiecutter.include_chat_domain == "yes" %}
+    style Chat fill:#2E7D32,color:#fff
+{% endif %}
+    style Health fill:#546E7A,color:#fff
+    style DB fill:#E65100,color:#fff
+    style Redis fill:#B71C1C,color:#fff
+    style Mail fill:#01579B,color:#fff
+{% if cookiecutter.include_chat_domain == "yes" %}
+    style LLM fill:#4A148C,color:#fff
+{% endif %}
+    style middleware fill:#F3E5F5,stroke:#7B1FA2
+    style domains fill:#E8EAF6,stroke:#3949AB
+    style infra fill:#E8F5E9,stroke:#2E7D32
+```
+
+### JWT 전략
+
+Bearer 헤더 전용(쿠키 미사용)으로 Access Token({{ cookiecutter.jwt_access_ttl_minutes }}분) + Refresh Token({{ cookiecutter.jwt_refresh_ttl_days }}일)을 발급합니다.
+Refresh rotation과 reuse detection으로 토큰 탈취를 방어합니다.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+
+    [*] --> Active : 로그인 성공\nAccess({{ cookiecutter.jwt_access_ttl_minutes }}분) + Refresh({{ cookiecutter.jwt_refresh_ttl_days }}일) 발급
+
+    Active --> Expired : TTL 만료
+    Active --> Revoked : 로그아웃\n(Redis jti 블랙리스트 등록)
+
+    Expired --> Active : POST /auth/refresh\nRefresh 토큰으로 재발급 + rotation
+    Expired --> Compromised : Refresh 재사용 감지\n(같은 jti 재전송)
+
+    Compromised --> Revoked : 모든 세션 즉시 폐기\n(reuse detection)
+    Revoked --> [*]
+
+    note right of Active
+        요청마다 헤더에 포함
+        Authorization: Bearer {access_token}
+    end note
+
+    note right of Compromised
+        재사용 감지 시 해당 사용자의
+        모든 refresh token 무효화
+    end note
+```
+
+### 로컬 개발 토폴로지
+
+FastAPI 앱은 **호스트 머신**에서 직접 실행하고, 인프라 서비스만 Docker로 운영합니다.
+이 방식으로 hot-reload, IDE 디버거 연결, uv 캐시 활용이 가능합니다.
+
+```mermaid
+graph LR
+    subgraph host["🖥️ 호스트 머신 (로컬)"]
+        direction TB
+        UV["uv run uvicorn\n--reload\nPython {{ cookiecutter.python_version }}\n:{{ cookiecutter.fastapi_port }}"]
+    end
+
+    subgraph compose["🐳 Docker Compose"]
+        direction TB
+        PG["postgres:16-alpine\n:{{ cookiecutter.postgres_port }}"]
+        RD["redis:7-alpine\n:{{ cookiecutter.redis_port }}"]
+        MP["axllent/mailpit\n:{{ cookiecutter.mailpit_smtp_port }} (SMTP)\n:{{ cookiecutter.mailpit_ui_port }} (Web UI)"]
+    end
+
+    subgraph full["🐳 Full Docker (--profile app)"]
+        direction TB
+        APP["app (Dockerfile)\nuv 기반 멀티스테이지\n:{{ cookiecutter.fastapi_port }}"]
+    end
+
+    UV <-->|"localhost:{{ cookiecutter.postgres_port }}"| PG
+    UV <-->|"localhost:{{ cookiecutter.redis_port }}"| RD
+    UV <-->|"localhost:{{ cookiecutter.mailpit_smtp_port }}"| MP
+
+    APP <-->|"postgres:5432"| PG
+    APP <-->|"redis:6379"| RD
+    APP <-->|"mailpit:1025"| MP
+
+    style UV fill:#1565C0,color:#fff
+    style APP fill:#1B5E20,color:#fff
+    style PG fill:#E65100,color:#fff
+    style RD fill:#B71C1C,color:#fff
+    style MP fill:#01579B,color:#fff
+    style host fill:#E3F2FD,stroke:#1565C0,stroke-width:2px
+    style compose fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px
+    style full fill:#F1F8E9,stroke:#558B2F,stroke-dasharray:5 5
+```
 
 ---
 
@@ -136,69 +300,106 @@ Light Modular Monolith (DDD)
 
 ### 사전 요구사항
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) 또는 Docker Engine
-- [uv](https://github.com/astral-sh/uv#installation) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
-- Python >= {{ cookiecutter.python_version }} (`uv python install {{ cookiecutter.python_version }}`)
+| 도구 | 설치 방법 |
+|------|-----------|
+| Docker Desktop | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) |
+| uv | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| Python >= {{ cookiecutter.python_version }} | `uv python install {{ cookiecutter.python_version }}` |
 
-### 1단계 — 인프라 컨테이너 시작
-
-```bash
-# postgres + redis + mailpit 컨테이너 시작
-docker-compose up -d
-
-# 헬스 확인
-docker-compose ps
-```
-
-### 2단계 — Python 의존성 설치
+### 원클릭 부팅 (권장)
 
 ```bash
-# uv로 가상환경 생성 + 의존성 설치 (dev 그룹 포함)
-uv sync
+make dev
 ```
 
-### 3단계 — 환경변수 설정
+> `make dev`는 아래 5단계를 **자동으로** 순서대로 실행합니다.
+
+### 단계별 부팅 (수동)
+
+#### 1단계 — 환경변수 설정
 
 ```bash
 cp .env.example .env
-# .env 파일을 열어 SECRET_KEY 등 필수 값을 채웁니다
+# .env 파일을 열어 아래 필수 값을 설정합니다:
+#   SECRET_KEY      → openssl rand -hex 32
+#   JWT_SECRET_KEY  → openssl rand -hex 32
+{% if cookiecutter.include_chat_domain == "yes" %}
+#   LLM API 키      → 선택한 provider에 맞는 키 1개
+{% endif %}
 ```
 
-### 4단계 — DB 마이그레이션
+#### 2단계 — Python 의존성 설치
+
+```bash
+# uv로 가상환경(.venv) 생성 + 의존성 설치 (dev 그룹 포함)
+uv sync
+```
+
+#### 3단계 — 인프라 컨테이너 기동
+
+```bash
+# postgres + redis + mailpit 컨테이너 기동 (healthy 상태까지 대기)
+make infra
+
+# 상태 확인
+docker compose ps
+```
+
+#### 4단계 — DB 마이그레이션
 
 ```bash
 uv run alembic upgrade head
 ```
 
-### 5단계 — 개발 서버 시작
+#### 5단계 — 개발 서버 시작
 
 ```bash
-# hot-reload 활성화
+# hot-reload 활성화 (파일 저장 시 자동 재시작)
 uv run uvicorn {{ cookiecutter.package_name }}.main:app \
     --host {{ cookiecutter.fastapi_host }} \
     --port {{ cookiecutter.fastapi_port }} \
     --reload
 ```
 
-또는 Makefile이 있다면:
-
-```bash
-make dev        # docker-compose up -d + uv sync + alembic upgrade + uvicorn --reload
-make stop       # docker-compose stop
-make test       # pytest
-make lint       # ruff check + mypy
-```
-
 ### 헬스체크 확인
 
 ```bash
 curl http://localhost:{{ cookiecutter.fastapi_port }}/health
-# → {"status": "ok"}
+# → {"status": "ok", "env": "development"}
 ```
 
 ### 메일 확인 (Mailpit)
 
 브라우저에서 `http://localhost:{{ cookiecutter.mailpit_ui_port }}` 접속 → 회원가입 인증 메일 등을 확인할 수 있습니다.
+
+### Full Docker 모드 (프로덕션 유사 환경)
+
+호스트 uvicorn 대신 모든 것을 컨테이너로 실행하려면 `--profile app` 플래그를 사용합니다.
+
+```bash
+# Dockerfile 빌드 + 전체 스택 컨테이너 기동
+docker compose --profile app up --build
+
+# 헬스체크
+curl http://localhost:{{ cookiecutter.fastapi_port }}/health
+```
+
+> **주의**: 이 모드에서 `app` 컨테이너는 postgres/redis/mailpit 서비스명으로 통신합니다 (`localhost` 대신). `.env` 파일의 `DATABASE_URL`/`REDIS_URL`을 직접 지정한 경우 compose.yml의 `environment` 섹션이 덮어씁니다.
+
+### Makefile 주요 명령어
+
+```bash
+make help               # 전체 명령어 목록
+make dev                # 풀 부트스트랩 (권장)
+make serve              # 서버만 재시작 (infra 이미 실행 중일 때)
+make infra              # docker-compose up -d (infra only, healthy 대기)
+make infra-down         # docker-compose down
+make migrate            # alembic upgrade head
+make test               # pytest (전체)
+make lint               # ruff check + mypy
+make format             # ruff format + ruff check --fix
+make clean              # 빌드 캐시 정리
+```
 
 ---
 
@@ -206,15 +407,32 @@ curl http://localhost:{{ cookiecutter.fastapi_port }}/health
 
 `.env.example` 파일을 복사해 `.env`를 만들고 아래 항목을 채워야 합니다.
 
+### 필수 변경 항목 (빠른 참조)
+
+```bash
+# 서버 기동 전 반드시 변경
+SECRET_KEY=<openssl rand -hex 32>
+JWT_SECRET_KEY=<openssl rand -hex 32>   # SECRET_KEY와 다른 값 사용
+{% if cookiecutter.include_chat_domain == "yes" %}
+# LLM 프로바이더 키 (선택한 provider 1개만 설정)
+{% if cookiecutter.llm_provider == "openai" %}OPENAI_API_KEY=sk-...{% endif %}
+{% if cookiecutter.llm_provider == "anthropic" %}ANTHROPIC_API_KEY=sk-ant-...{% endif %}
+{% if cookiecutter.llm_provider == "gemini" %}GEMINI_API_KEY=AIza...{% endif %}
+{% if cookiecutter.llm_provider == "azure" %}AZURE_OPENAI_API_KEY=...{% endif %}
+{% if cookiecutter.llm_provider == "ollama" %}OLLAMA_BASE_URL=http://localhost:11434  # 키 불필요{% endif %}
+{% endif %}
+```
+
 ### 앱 기본 설정
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
 | `APP_ENV` | `development` | 실행 환경 (`development` / `production`) |
-| `DEBUG` | `true` | 디버그 모드 |
-| `SECRET_KEY` | *(필수 변경)* | JWT 서명 키 — 최소 32바이트 랜덤 문자열 |
-| `ALLOWED_HOSTS` | `*` | 허용 호스트 (`,` 구분) |
-| `CORS_ORIGINS` | `http://localhost:3000` | CORS 허용 오리진 (`,` 구분) |
+| `APP_DEBUG` | `true` | 디버그 모드 |
+| `SECRET_KEY` | *(필수 변경)* | 앱 시크릿 키 — 최소 32바이트 랜덤 |
+| `CORS_ORIGINS` | `http://localhost:3000,...` | CORS 허용 오리진 (`,` 구분) |
+| `HOST` | `{{ cookiecutter.fastapi_host }}` | Uvicorn 바인드 호스트 |
+| `PORT` | `{{ cookiecutter.fastapi_port }}` | Uvicorn 포트 |
 
 ### 데이터베이스
 
@@ -226,6 +444,7 @@ curl http://localhost:{{ cookiecutter.fastapi_port }}/health
 | `POSTGRES_PASSWORD` | `{{ cookiecutter.postgres_password }}` | DB 비밀번호 |
 | `POSTGRES_DB` | `{{ cookiecutter.postgres_db }}` | DB 이름 |
 | `DATABASE_URL` | *(자동 조합)* | `postgresql+asyncpg://...` (명시 시 우선 적용) |
+| `DATABASE_URL_SYNC` | *(자동 조합)* | `postgresql+psycopg2://...` (Alembic용) |
 
 ### Redis
 
@@ -240,32 +459,39 @@ curl http://localhost:{{ cookiecutter.fastapi_port }}/health
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
+| `JWT_SECRET_KEY` | *(필수 변경)* | JWT 서명 키 — SECRET_KEY와 다른 값 사용 |
 | `JWT_ALGORITHM` | `HS256` | JWT 서명 알고리즘 |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | `{{ cookiecutter.jwt_access_ttl_minutes }}` | Access Token TTL (분) |
-| `REFRESH_TOKEN_EXPIRE_DAYS` | `{{ cookiecutter.jwt_refresh_ttl_days }}` | Refresh Token TTL (일) |
+| `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | `{{ cookiecutter.jwt_access_ttl_minutes }}` | Access Token TTL (분) |
+| `JWT_REFRESH_TOKEN_EXPIRE_DAYS` | `{{ cookiecutter.jwt_refresh_ttl_days }}` | Refresh Token TTL (일) |
 
 ### OAuth 프로바이더
 
 {% if "google" in cookiecutter.oauth_providers %}
-| 변수 | 기본값 | 설명 |
-|------|--------|------|
-| `GOOGLE_CLIENT_ID` | *(필수)* | Google OAuth Client ID |
-| `GOOGLE_CLIENT_SECRET` | *(필수)* | Google OAuth Client Secret |
-| `GOOGLE_REDIRECT_URI` | `http://localhost:{{ cookiecutter.fastapi_port }}/api/v1/auth/oauth/google/callback` | Google OAuth 콜백 URL |
+**Google OAuth** ([설정 콘솔](https://console.cloud.google.com/apis/credentials))
+
+| 변수 | 설명 |
+|------|------|
+| `GOOGLE_CLIENT_ID` | Google OAuth Client ID |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth Client Secret |
+| `GOOGLE_REDIRECT_URI` | `http://localhost:{{ cookiecutter.fastapi_port }}/api/v1/auth/oauth/google/callback` |
 {% endif %}
 {% if "kakao" in cookiecutter.oauth_providers %}
-| 변수 | 기본값 | 설명 |
-|------|--------|------|
-| `KAKAO_CLIENT_ID` | *(필수)* | Kakao REST API 키 |
-| `KAKAO_CLIENT_SECRET` | *(선택)* | Kakao Client Secret |
-| `KAKAO_REDIRECT_URI` | `http://localhost:{{ cookiecutter.fastapi_port }}/api/v1/auth/oauth/kakao/callback` | Kakao OAuth 콜백 URL |
+**Kakao OAuth** ([설정 콘솔](https://developers.kakao.com/console/app))
+
+| 변수 | 설명 |
+|------|------|
+| `KAKAO_CLIENT_ID` | Kakao REST API 키 |
+| `KAKAO_CLIENT_SECRET` | Kakao Client Secret (선택) |
+| `KAKAO_REDIRECT_URI` | `http://localhost:{{ cookiecutter.fastapi_port }}/api/v1/auth/oauth/kakao/callback` |
 {% endif %}
 {% if "naver" in cookiecutter.oauth_providers %}
-| 변수 | 기본값 | 설명 |
-|------|--------|------|
-| `NAVER_CLIENT_ID` | *(필수)* | Naver Client ID |
-| `NAVER_CLIENT_SECRET` | *(필수)* | Naver Client Secret |
-| `NAVER_REDIRECT_URI` | `http://localhost:{{ cookiecutter.fastapi_port }}/api/v1/auth/oauth/naver/callback` | Naver OAuth 콜백 URL |
+**Naver OAuth** ([설정 콘솔](https://developers.naver.com/apps/#/list))
+
+| 변수 | 설명 |
+|------|------|
+| `NAVER_CLIENT_ID` | Naver Client ID |
+| `NAVER_CLIENT_SECRET` | Naver Client Secret |
+| `NAVER_REDIRECT_URI` | `http://localhost:{{ cookiecutter.fastapi_port }}/api/v1/auth/oauth/naver/callback` |
 {% endif %}
 
 ### 이메일
@@ -277,28 +503,32 @@ curl http://localhost:{{ cookiecutter.fastapi_port }}/health
 | `MAIL_USERNAME` | *(선택)* | SMTP 사용자 |
 | `MAIL_PASSWORD` | *(선택)* | SMTP 비밀번호 |
 | `MAIL_FROM` | `noreply@{{ cookiecutter.project_slug }}.local` | 발신 이메일 주소 |
-| `MAIL_STARTTLS` | `false` | STARTTLS 사용 여부 (prod: `true`) |
-| `MAIL_SSL_TLS` | `false` | SSL/TLS 사용 여부 (prod: `true`) |
+| `MAIL_STARTTLS` | `false` | STARTTLS (prod: `true`) |
+| `MAIL_SSL_TLS` | `false` | SSL/TLS (prod: `true`) |
 
 {% if cookiecutter.include_chat_domain == "yes" %}
 ### LLM / Chat 도메인
 
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
-| `LLM_PROVIDER` | `{{ cookiecutter.llm_provider }}` | LLM 프로바이더 (litellm prefix 사용) |
+| `LLM_PROVIDER` | `{{ cookiecutter.llm_provider }}` | LLM 프로바이더 (`openai` / `anthropic` / `gemini` / `azure` / `ollama`) |
 | `LLM_DEFAULT_MODEL` | `{{ cookiecutter.llm_default_model }}` | 기본 모델 이름 |
-| `LLM_MAX_TOKENS` | `4096` | 최대 응답 토큰 수 |
-| `LLM_TEMPERATURE` | `0.7` | 모델 temperature |
-| `OPENAI_API_KEY` | *(provider=openai 시 필수)* | OpenAI API 키 |
-| `ANTHROPIC_API_KEY` | *(provider=anthropic 시 필수)* | Anthropic API 키 |
-| `GEMINI_API_KEY` | *(provider=gemini 시 필수)* | Google Gemini API 키 |
-| `AZURE_API_KEY` | *(provider=azure 시 필수)* | Azure OpenAI API 키 |
-| `AZURE_API_BASE` | *(provider=azure 시 필수)* | Azure OpenAI endpoint URL |
-| `AZURE_API_VERSION` | `2024-02-01` | Azure OpenAI API 버전 |
+| `OPENAI_API_KEY` | — | `LLM_PROVIDER=openai` 시 필수 |
+| `ANTHROPIC_API_KEY` | — | `LLM_PROVIDER=anthropic` 시 필수 |
+| `GEMINI_API_KEY` | — | `LLM_PROVIDER=gemini` 시 필수 |
+| `AZURE_OPENAI_API_KEY` | — | `LLM_PROVIDER=azure` 시 필수 |
+| `AZURE_OPENAI_ENDPOINT` | — | Azure OpenAI endpoint URL |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | `LLM_PROVIDER=ollama` 시 사용 (키 불필요) |
 
-> **LLM 프로바이더 교체**: `LLM_PROVIDER` 와 해당 API 키 env만 변경하면 됩니다. 코드 수정 불필요.
+> **LLM 프로바이더 교체**: `LLM_PROVIDER` 값과 해당 API 키 환경변수만 변경하면 됩니다. **코드 수정 불필요.**
 
 {% endif %}
+### 로깅
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| `LOG_LEVEL` | `INFO` | 로그 레벨 (`DEBUG` / `INFO` / `WARNING` / `ERROR`) |
+| `LOG_FORMAT` | `json` | 출력 형식 (`json` / `console`) |
 
 ---
 
@@ -320,7 +550,7 @@ curl http://localhost:{{ cookiecutter.fastapi_port }}/health
 │       │   ├── security.py                       # JWT encode/decode, argon2 해시
 │       │   ├── middleware.py                     # correlation_id + structlog 미들웨어
 │       │   ├── exceptions.py                     # 공통 HTTPException 핸들러
-│       │   └── deps.py                           # FastAPI Depends 공통 (get_db, get_current_user 등)
+│       │   └── deps.py                           # FastAPI Depends (get_db, get_current_user 등)
 │       │
 │       └── domains/                              # DDD Bounded Contexts
 │           │
@@ -366,9 +596,12 @@ curl http://localhost:{{ cookiecutter.fastapi_port }}/health
 │   └── versions/                                 # 생성된 마이그레이션 파일들
 │
 ├── scripts/                                      # 유틸리티 스크립트
-│   └── create_superuser.py                       # 초기 슈퍼유저 생성
+│   ├── wait_for_services.sh                      # docker-compose healthy 대기 스크립트
+│   └── smoke_test.py                             # API 기동 검증 스크립트
 │
 ├── docker-compose.yml                            # 로컬 인프라 (postgres / redis / mailpit)
+│                                                 # --profile app 으로 앱 컨테이너도 기동 가능
+├── Dockerfile                                    # 멀티스테이지 프로덕션 이미지 (uv 기반)
 ├── .env.example                                  # 환경변수 템플릿
 ├── alembic.ini                                   # Alembic 설정
 ├── pyproject.toml                                # 프로젝트 메타데이터 + 도구 설정
@@ -384,13 +617,55 @@ curl http://localhost:{{ cookiecutter.fastapi_port }}/health
 
 개발 서버 실행 후 브라우저에서 접근:
 
-- **Swagger UI**: `http://localhost:{{ cookiecutter.fastapi_port }}/docs`
-- **ReDoc**: `http://localhost:{{ cookiecutter.fastapi_port }}/redoc`
-- **OpenAPI JSON**: `http://localhost:{{ cookiecutter.fastapi_port }}/openapi.json`
+- **Swagger UI**: http://localhost:{{ cookiecutter.fastapi_port }}/docs
+- **ReDoc**: http://localhost:{{ cookiecutter.fastapi_port }}/redoc
+- **OpenAPI JSON**: http://localhost:{{ cookiecutter.fastapi_port }}/openapi.json
 
 ### 주요 엔드포인트
 
-#### Auth
+#### Auth 도메인 흐름
+
+회원가입부터 로그아웃까지의 전체 인증 흐름입니다. 각 단계는 순서대로 실행되어야 합니다.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as 클라이언트
+    participant A as Auth API
+    participant DB as PostgreSQL
+    participant R as Redis
+    participant M as Email (Mailpit)
+
+    Note over C,M: 회원가입 & 이메일 인증
+
+    C->>+A: POST /api/v1/auth/signup\n{email, password, display_name}
+    A->>DB: User 생성 (argon2 해시)
+    A->>M: 인증 토큰 메일 발송
+    A-->>-C: 201 Created
+
+    C->>+A: POST /api/v1/auth/verify-email\n{token}
+    A->>DB: EmailVerification 검증 → is_verified=true
+    A-->>-C: 200 OK
+
+    Note over C,M: 로그인 & 토큰 관리
+
+    C->>+A: POST /api/v1/auth/login\n{email, password}
+    A->>DB: User 조회 + argon2 검증
+    A->>R: jti 등록 (블랙리스트용)
+    A-->>-C: {access_token({{ cookiecutter.jwt_access_ttl_minutes }}분), refresh_token({{ cookiecutter.jwt_refresh_ttl_days }}일)}
+
+    C->>+A: POST /api/v1/auth/refresh\n{refresh_token}
+    A->>R: 기존 jti 블랙리스트 등록 (rotation)
+    A->>DB: 새 RefreshToken 저장
+    A-->>-C: {새 access_token, 새 refresh_token}
+
+    C->>+A: POST /api/v1/auth/logout\n{refresh_token}
+    A->>R: access jti 블랙리스트 등록
+    A->>DB: RefreshToken 물리 삭제
+    A-->>-C: 200 OK
+```
+
+#### Auth API 엔드포인트 목록
 
 | Method | Path | 설명 |
 |--------|------|------|
@@ -416,7 +691,39 @@ curl http://localhost:{{ cookiecutter.fastapi_port }}/health
 {% endif %}
 
 {% if cookiecutter.include_chat_domain == "yes" %}
-#### Chat
+#### Chat 도메인 — SSE 스트리밍 흐름
+
+메시지 전송 시 `Accept: text/event-stream` 헤더를 포함하면 LLM 응답이 토큰 단위로 스트리밍됩니다.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as 클라이언트
+    participant API as Chat API
+    participant LC as LangChain
+    participant LLM as {{ cookiecutter.llm_provider }} (litellm)
+    participant DB as PostgreSQL
+
+    C->>+API: POST /api/v1/chat/conversations/{id}/messages\nAccept: text/event-stream\n{content: "질문 내용"}
+    API->>DB: Message(role=user) 저장
+
+    API->>+LC: RunnableChain.astream()
+    LC->>+LLM: ChatLiteLLM streaming 요청
+
+    loop SSE 토큰 스트리밍
+        LLM-->>LC: AIMessageChunk {token}
+        LC-->>API: AIMessageChunk
+        API-->>C: data: {"token": "..."}\n\n
+    end
+
+    LLM-->>-LC: finish_reason="stop"
+    LC-->>-API: 스트리밍 완료
+
+    API->>DB: Message(role=assistant) 저장\n(전체 content + token_count + finish_reason)
+    API-->>-C: data: {"done": true, "usage": {...}}\n\n
+```
+
+#### Chat API 엔드포인트 목록
 
 | Method | Path | 설명 |
 |--------|------|------|
@@ -426,8 +733,6 @@ curl http://localhost:{{ cookiecutter.fastapi_port }}/health
 | `DELETE` | `/api/v1/chat/conversations/{id}` | 대화 삭제 |
 | `GET`  | `/api/v1/chat/conversations/{id}/messages` | 메시지 목록 |
 | `POST` | `/api/v1/chat/conversations/{id}/messages` | 메시지 전송 (SSE 스트리밍) |
-
-> **SSE 스트리밍**: `Accept: text/event-stream` 헤더를 포함하면 LLM 응답이 토큰 단위로 스트리밍됩니다.
 
 {% endif %}
 
@@ -439,19 +744,17 @@ curl http://localhost:{{ cookiecutter.fastapi_port }}/health
 # 전체 테스트 (커버리지 포함)
 uv run pytest
 
-# 특정 마커만 실행
-uv run pytest -m unit          # 단위 테스트
-uv run pytest -m integration   # DB/Redis 연동 테스트
-uv run pytest -m e2e           # E2E 테스트
+# Makefile 단축키
+make test              # 전체 테스트
+make test-unit         # 단위 테스트만 (-m unit)
+make test-integration  # 통합 테스트만 (-m integration, infra 필요)
+make test-cov          # 커버리지 HTML 리포트 (htmlcov/index.html)
 
 # 특정 파일
 uv run pytest tests/auth/test_auth_flow.py -v
-
-# 커버리지 HTML 리포트 (htmlcov/index.html)
-uv run pytest --cov-report=html
 ```
 
-> 통합 테스트 실행 전 `docker-compose up -d`로 postgres와 redis가 기동되어 있어야 합니다.
+> 통합 테스트 실행 전 `docker compose up -d`로 postgres와 redis가 기동되어 있어야 합니다.
 
 ---
 
@@ -471,13 +774,14 @@ uv run ruff check --fix src/ tests/
 uv run mypy src/
 
 # 전체 품질 검사 (Makefile)
-make lint
+make lint      # ruff check + mypy
+make format    # ruff format + ruff check --fix
 
 {% if cookiecutter.use_pre_commit == "yes" %}
 # pre-commit 설치 (최초 1회)
 uv run pre-commit install
 
-# 수동 실행
+# 수동 실행 (전체 파일)
 uv run pre-commit run --all-files
 {% endif %}
 ```
@@ -501,15 +805,21 @@ uv run alembic downgrade -1
 
 # 특정 리비전으로 롤백
 uv run alembic downgrade <revision_id>
+
+# Makefile 단축키
+make migrate          # alembic upgrade head
+make revision         # 새 revision 생성 (메시지 입력 프롬프트)
+make downgrade        # 한 단계 롤백
 ```
 
-> 마이그레이션 파일은 항상 코드 리뷰를 거쳐 커밋합니다. 자동 생성된 SQL을 반드시 검토하세요.
+> 마이그레이션 파일은 항상 코드 리뷰를 거쳐 커밋합니다. autogenerate로 생성된 SQL을 반드시 검토하세요.
 
 ---
 
 ## 로깅
 
 모든 로그는 **structlog JSON** 형식으로 출력되며, 각 요청에 `correlation_id`가 자동으로 부여됩니다.
+`LOG_FORMAT=console`로 설정하면 개발 중 사람이 읽기 편한 형식으로 출력됩니다.
 
 ```json
 {

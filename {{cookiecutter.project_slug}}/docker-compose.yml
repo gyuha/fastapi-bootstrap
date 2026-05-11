@@ -1,15 +1,23 @@
 # ============================================================
-# docker-compose.yml — Infrastructure services for local development
+# docker-compose.yml — {{ cookiecutter.project_name }}
 # ============================================================
-# This file starts ONLY the infrastructure containers:
-#   - PostgreSQL  (database)
-#   - Redis       (cache / pub-sub / JWT blacklist)
-#   - Mailpit     (local SMTP + web UI for dev email)
 #
-# The FastAPI application runs on the HOST with hot-reload:
-#   make dev   →  docker compose up -d  +  uv run uvicorn --reload
+# ┌──────────────────────────────────────────────────────────┐
+# │  LOCAL DEV (권장 기본 모드)                               │
+# │  FastAPI는 HOST에서 uv run으로 실행 (hot-reload 지원)     │
+# │                                                          │
+# │  make dev                                                │
+# │   → docker compose up -d  (postgres + redis + mailpit)   │
+# │   → uv sync               (의존성 설치)                   │
+# │   → alembic upgrade head  (DB 마이그레이션)               │
+# │   → uvicorn --reload      (호스트에서 앱 기동)            │
+# │                                                          │
+# │  FULL DOCKER (프로덕션 유사 환경 / CI)                   │
+# │  docker compose --profile app up --build                 │
+# │   → 모든 서비스(infra + app) 컨테이너로 실행              │
+# └──────────────────────────────────────────────────────────┘
 #
-# Environment variables are read from .env (copy from .env.example).
+# 환경변수: .env 파일에서 로드 (cp .env.example .env)
 # ============================================================
 
 services:
@@ -22,14 +30,14 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-app}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
-      POSTGRES_DB: ${POSTGRES_DB:-app_db}
+      POSTGRES_DB: ${POSTGRES_DB:-{{ cookiecutter.postgres_db }}}
       PGDATA: /var/lib/postgresql/data/pgdata
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-{{ cookiecutter.postgres_port }}}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-app_db}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-{{ cookiecutter.postgres_db }}}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -43,7 +51,7 @@ services:
     restart: unless-stopped
     command: redis-server --save 60 1 --loglevel warning
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "${REDIS_PORT:-{{ cookiecutter.redis_port }}}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -60,8 +68,8 @@ services:
     image: axllent/mailpit:latest
     restart: unless-stopped
     ports:
-      - "${MAILPIT_SMTP_PORT:-1025}:1025"   # SMTP
-      - "${MAILPIT_UI_PORT:-8025}:8025"     # Web UI
+      - "${MAILPIT_SMTP_PORT:-{{ cookiecutter.mailpit_smtp_port }}}:1025"   # SMTP
+      - "${MAILPIT_UI_PORT:-{{ cookiecutter.mailpit_ui_port }}}:8025"       # Web UI
     environment:
       MP_MAX_MESSAGES: 500
       MP_SMTP_AUTH_ACCEPT_ANY: 1
@@ -76,6 +84,57 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+
+  # --------------------------------------------------------------------------
+  # FastAPI Application  (profile: app — opt-in, NOT started by default)
+  # --------------------------------------------------------------------------
+  # DEFAULT (make dev): FastAPI는 HOST에서 uv run uvicorn --reload 로 실행
+  #   → 파일 변경 즉시 hot-reload, IDE 디버거 연결, uv 캐시 활용 가능
+  #
+  # FULL DOCKER (프로덕션 유사 환경 / CI):
+  #   docker compose --profile app up --build
+  #   → Dockerfile 멀티스테이지 빌드 (uv 기반) → runtime 컨테이너 실행
+  #   → POSTGRES_HOST / REDIS_HOST 는 컨테이너 서비스명으로 자동 재정의됨
+  #
+  # 포트 재정의: APP_PORT=9000 docker compose --profile app up --build
+  # --------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+      args:
+        PYTHON_VERSION: "{{ cookiecutter.python_version }}"
+    profiles:
+      - app   # `docker compose --profile app up` 로만 활성화
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # 컨테이너 내부에서는 서비스명으로 통신 (localhost 불가)
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      MAIL_SERVER: mailpit
+      MAIL_PORT: "1025"
+      # DATABASE_URL / REDIS_URL 을 컨테이너 서비스명 기반으로 덮어씀
+      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@postgres:${POSTGRES_PORT:-{{ cookiecutter.postgres_port }}}/${POSTGRES_DB:-{{ cookiecutter.postgres_db }}}"
+      DATABASE_URL_SYNC: "postgresql+psycopg2://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@postgres:${POSTGRES_PORT:-{{ cookiecutter.postgres_port }}}/${POSTGRES_DB:-{{ cookiecutter.postgres_db }}}"
+      REDIS_URL: "redis://redis:${REDIS_PORT:-{{ cookiecutter.redis_port }}}/${REDIS_DB:-{{ cookiecutter.redis_db }}}"
+    ports:
+      - "${APP_PORT:-{{ cookiecutter.fastapi_port }}}:{{ cookiecutter.fastapi_port }}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mailpit:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:{{ cookiecutter.fastapi_port }}/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
 # --------------------------------------------------------------------------
 # Named volumes

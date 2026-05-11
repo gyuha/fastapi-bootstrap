@@ -53,6 +53,14 @@ jobs:
       - name: "Install cookiecutter"
         run: pip install "cookiecutter>=2.1"
 
+      # ── Dockerfile 멀티스테이지 빌드 구조 정적 검증 (Sub-AC 3.1) ────────────
+      # Docker 없이 Dockerfile 텍스트를 파싱하여 COPY --from 레이어 범위 검증:
+      #   • uv-binary / builder / runtime 3스테이지 존재
+      #   • runtime이 /runtime-venv + alembic 만 복사
+      #   • uv/uvx · build-essential · gcc 등이 runtime에 없음
+      - name: "Validate Dockerfile multi-stage build structure (static analysis)"
+        run: python scripts/validate_dockerfile_structure.py
+
       - name: "Run template validation (validate_template.py)"
         run: python scripts/validate_template.py
 
