@@ -10,7 +10,9 @@ Tables
 * refresh_tokens  — one row per active refresh token (rotation + reuse detection)
 * email_verifications — pending email verification tokens
 * password_resets — pending password-reset tokens
+{% if cookiecutter.oauth_providers != "none" %}
 * oauth_accounts  — linked federated-provider identities
+{% endif %}
 
 All UUIDs are server-generated (``uuid4``) and stored as native UUID columns on
 PostgreSQL via ``postgresql.UUID(as_uuid=True)``.
@@ -34,7 +36,9 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+{% if cookiecutter.oauth_providers != "none" %}
     UniqueConstraint,
+{% endif %}
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -173,9 +177,11 @@ class User(Base):
     password_resets: Mapped[list["PasswordReset"]] = relationship(
         "PasswordReset", back_populates="user", cascade="all, delete-orphan"
     )
+{% if cookiecutter.oauth_providers != "none" %}
     oauth_accounts: Mapped[list["OAuthAccount"]] = relationship(
         "OAuthAccount", back_populates="user", cascade="all, delete-orphan"
     )
+{% endif %}
 
     def has_permission(self, key: str) -> bool:
         """Return True if any of the user's roles grant *key*."""
@@ -298,6 +304,7 @@ class PasswordReset(Base):
         return f"<PasswordReset user_id={self.user_id!r} used={self.used}>"
 
 
+{% if cookiecutter.oauth_providers != "none" %}
 # ---------------------------------------------------------------------------
 # OAuthAccount
 # ---------------------------------------------------------------------------
@@ -340,3 +347,4 @@ class OAuthAccount(Base):
 
     def __repr__(self) -> str:
         return f"<OAuthAccount provider={self.provider!r} uid={self.provider_user_id!r}>"
+{% endif %}

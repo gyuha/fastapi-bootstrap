@@ -320,6 +320,7 @@ class AuthService:
 
         logger.info("password_reset_completed", user_id=str(pr.user_id))
 
+{% if cookiecutter.oauth_providers != "none" %}
     # ── OAuth provisioning ────────────────────────────────────────────────────
 
     async def oauth_provision_user(
@@ -372,6 +373,7 @@ class AuthService:
         tokens = await self._issue_tokens(user)
         return user, tokens
 
+{% endif %}
     # ── Internal ──────────────────────────────────────────────────────────────
 
     async def _issue_tokens(

@@ -5,11 +5,11 @@ Shared fixtures available across all test modules:
 * :func:`settings_cache_clear` — automatically clears :func:`get_settings`
   LRU cache before and after every test so monkeypatched env vars don't leak
   across tests.
-
+{% if cookiecutter.include_chat_domain == "yes" %}
 * :func:`env_openai` / :func:`env_ollama` — monkeypatched environment
-  variable sets for each LLM provider.  Imported here so sub-modules can
-  declare them as dependencies without re-importing from the chat conftest.
-
+  variable sets for each LLM provider.  These are defined in
+  ``tests/chat/conftest.py`` and may be referenced by chat test modules.
+{% endif %}
 No network calls, DB connections, or Redis connections are made in this file.
 """
 

@@ -30,6 +30,8 @@ build/
 MANIFEST
 
 # ── Test / coverage artefacts ─────────────────────────────────────────────────
+tests/
+conftest.py
 .pytest_cache/
 .coverage
 .coverage.*
@@ -65,6 +67,7 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+!.env.prod.example
 
 # ── Documentation ─────────────────────────────────────────────────────────────
 docs/
@@ -86,5 +89,6 @@ scripts/
 *.log
 logs/
 
-# ── pre-commit ────────────────────────────────────────────────────────────────
+# ── pre-commit / security baseline ───────────────────────────────────────────
 .pre-commit-config.yaml
+.secrets.baseline

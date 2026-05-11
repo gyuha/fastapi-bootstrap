@@ -132,10 +132,18 @@ def cleanup_chat_domain() -> None:
     # Domain source files
     remove_path(PROJECT_ROOT / "src" / PACKAGE_NAME / "domains" / "chat")
 
+    # Infra LLM adapter (only needed for the chat domain)
+    remove_path(PROJECT_ROOT / "src" / PACKAGE_NAME / "infra" / "llm")
+
     # Test directory
     remove_path(PROJECT_ROOT / "tests" / "chat")
+    remove_path(PROJECT_ROOT / "tests" / "infra")
 
-    print(_ok("Chat domain removed.  LangChain/litellm deps already excluded via pyproject.toml conditional."))
+    print(_ok(
+        "Chat domain removed.  "
+        "LangChain / langchain-litellm / litellm / sse-starlette / tenacity deps "
+        "already excluded via pyproject.toml Jinja2 conditional block."
+    ))
 
 
 # ---------------------------------------------------------------------------

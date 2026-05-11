@@ -36,6 +36,7 @@ _PROJECT_ROOT = Path(__file__).parent.parent  # generated project root
 _MAKEFILE = _PROJECT_ROOT / "Makefile"
 _COMPOSE_FILE = _PROJECT_ROOT / "docker-compose.yml"
 _MAIN_PY = _PROJECT_ROOT / "src" / "{{ cookiecutter.package_name }}" / "main.py"
+_MAIN_MODULE = _PROJECT_ROOT / "src" / "{{ cookiecutter.package_name }}" / "__main__.py"
 
 
 def _makefile_text() -> str:
@@ -48,6 +49,10 @@ def _compose_text() -> str:
 
 def _main_text() -> str:
     return _MAIN_PY.read_text(encoding="utf-8")
+
+
+def _main_module_text() -> str:
+    return _MAIN_MODULE.read_text(encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -135,6 +140,32 @@ class TestMakefileHotReload:
         assert "$(SRC_DIR)" in block or "src/" in block, (
             "Makefile 'dev' target's --reload-dir should point to the src/ "
             "subtree (e.g. src/<package>) to limit the file-watch scope."
+        )
+
+    def test_dev_target_passes_host(self) -> None:
+        """'make dev' must pass --host to uvicorn so the server binds 0.0.0.0."""
+        block = _extract_target_block("dev")
+        assert "--host" in block, (
+            "Makefile 'dev' target must pass '--host' to uvicorn so the server "
+            "binds all interfaces (0.0.0.0) and is reachable from the container "
+            "network as well as the host browser."
+        )
+
+    def test_dev_target_passes_port(self) -> None:
+        """'make dev' must pass --port to uvicorn so the port is configurable."""
+        block = _extract_target_block("dev")
+        assert "--port" in block, (
+            "Makefile 'dev' target must pass '--port' to uvicorn so the "
+            "listening port can be configured via the cookiecutter variable."
+        )
+
+    def test_host_variable_defaults_to_all_interfaces(self) -> None:
+        """The HOST Makefile variable must default to 0.0.0.0."""
+        makefile = _makefile_text()
+        # Look for HOST := 0.0.0.0 or HOST = 0.0.0.0
+        assert re.search(r"HOST\s*:?=\s*0\.0\.0\.0", makefile), (
+            "Makefile HOST variable must default to '0.0.0.0' so that the "
+            "uvicorn process binds all network interfaces by default."
         )
 
 
@@ -291,6 +322,89 @@ class TestMainEntryPoint:
         source = _main_text()
         assert "lifespan" in source, (
             "main.py must register a lifespan context manager for startup/shutdown."
+        )
+
+    def test_main_block_uses_settings_host(self) -> None:
+        """The __main__ block must use settings.host — not a hardcoded '127.0.0.1'."""
+        source = _main_text()
+        assert "settings.host" in source, (
+            "main.py __main__ block must use 'settings.host' for the uvicorn "
+            "host parameter so the binding is driven by the HOST env var (default "
+            "0.0.0.0 from cookiecutter) rather than a hardcoded loopback address."
+        )
+
+    def test_main_block_uses_settings_port(self) -> None:
+        """The __main__ block must use settings.port — not a hardcoded integer."""
+        source = _main_text()
+        assert "settings.port" in source, (
+            "main.py __main__ block must use 'settings.port' for the uvicorn "
+            "port parameter so it respects the PORT env var."
+        )
+
+
+# ---------------------------------------------------------------------------
+# __main__.py — python -m <package> module execution support
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestMainModuleEntryPoint:
+    """__main__.py must exist and mirror the uvicorn configuration of main.py.
+
+    This enables running the app as ``uv run python -m {{ cookiecutter.package_name }}``,
+    which is equivalent to the explicit uvicorn invocation in the Makefile.
+    """
+
+    def test_main_module_file_exists(self) -> None:
+        """__main__.py must exist to support python -m <package> execution."""
+        assert _MAIN_MODULE.exists(), (
+            f"__main__.py not found at {_MAIN_MODULE}. "
+            "The package must define __main__.py so it can be invoked with "
+            "'uv run python -m {{ cookiecutter.package_name }}'."
+        )
+
+    def test_main_module_calls_uvicorn_run(self) -> None:
+        """__main__.py must call uvicorn.run() when executed as __main__."""
+        source = _main_module_text()
+        assert "uvicorn.run(" in source, (
+            "__main__.py must call uvicorn.run() to start the server when "
+            "the package is invoked as a module."
+        )
+
+    def test_main_module_uses_settings_host(self) -> None:
+        """__main__.py must use settings.host (not a hardcoded address)."""
+        source = _main_module_text()
+        assert "settings.host" in source, (
+            "__main__.py must pass settings.host to uvicorn.run() so the "
+            "binding address is driven by the HOST env var (default 0.0.0.0)."
+        )
+
+    def test_main_module_uses_settings_port(self) -> None:
+        """__main__.py must use settings.port (not a hardcoded port number)."""
+        source = _main_module_text()
+        assert "settings.port" in source, (
+            "__main__.py must pass settings.port to uvicorn.run() so the "
+            "listening port is driven by the PORT env var."
+        )
+
+    def test_main_module_uses_is_development_for_reload(self) -> None:
+        """__main__.py must gate hot-reload on settings.is_development()."""
+        source = _main_module_text()
+        assert "is_development()" in source, (
+            "__main__.py must use settings.is_development() to enable reload "
+            "only in development, matching the behaviour of make dev."
+        )
+
+    def test_main_module_has_main_guard(self) -> None:
+        """__main__.py must guard uvicorn.run() with if __name__ == '__main__'."""
+        source = _main_module_text()
+        has_main = (
+            '__name__ == "__main__"' in source
+            or "__name__ == '__main__'" in source
+        )
+        assert has_main, (
+            "__main__.py must guard execution with 'if __name__ == \"__main__\":' "
+            "so that merely importing the module doesn't launch uvicorn."
         )
 
 

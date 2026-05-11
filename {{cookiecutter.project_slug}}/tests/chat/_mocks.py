@@ -261,7 +261,7 @@ class StubLLMClient:
         messages: list[Any],
         **kwargs: Any,
     ) -> AIMessage:
-        """Return a pre-canned :class:`AIMessage`."""
+        """Return a pre-canned :class:`AIMessage` (LLMClientProtocol interface)."""
         return AIMessage(content=self._response)
 
     async def astream(
@@ -269,6 +269,27 @@ class StubLLMClient:
         messages: list[Any],
         **kwargs: Any,
     ) -> AsyncIterator[str]:
-        """Yield pre-canned string tokens."""
+        """Yield pre-canned string tokens (LLMClientProtocol interface)."""
+        for token in self._stream_tokens:
+            yield token
+
+    # ------------------------------------------------------------------
+    # AbstractLLMPort interface (invoke / stream)
+    # ------------------------------------------------------------------
+
+    async def invoke(
+        self,
+        messages: list[Any],
+        **kwargs: Any,
+    ) -> AIMessage:
+        """Return a pre-canned :class:`AIMessage` (AbstractLLMPort interface)."""
+        return AIMessage(content=self._response)
+
+    async def stream(
+        self,
+        messages: list[Any],
+        **kwargs: Any,
+    ) -> AsyncIterator[str]:
+        """Yield pre-canned string tokens (AbstractLLMPort interface)."""
         for token in self._stream_tokens:
             yield token

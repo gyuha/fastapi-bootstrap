@@ -205,10 +205,10 @@ show_compose_status() {
 # ── 서비스 접속 정보 출력 ───────────────────────────────────────────────────
 show_service_endpoints() {
   # .env 파일에서 포트 정보 로드 (없으면 기본값 사용)
-  local pg_port="${POSTGRES_PORT:-5432}"
-  local redis_port="${REDIS_PORT:-6379}"
-  local mailpit_ui="${MAILPIT_UI_PORT:-8025}"
-  local mailpit_smtp="${MAILPIT_SMTP_PORT:-1025}"
+  local pg_port="${POSTGRES_PORT:-{{ cookiecutter.postgres_port }}}"
+  local redis_port="${REDIS_PORT:-{{ cookiecutter.redis_port }}}"
+  local mailpit_ui="${MAILPIT_UI_PORT:-{{ cookiecutter.mailpit_ui_port }}}"
+  local mailpit_smtp="${MAILPIT_SMTP_PORT:-{{ cookiecutter.mailpit_smtp_port }}}"
 
   if [[ -f ".env" ]]; then
     # shellcheck disable=SC1091

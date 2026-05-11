@@ -104,11 +104,19 @@ _COMMON_REQUIRED: list[str] = [
     "src/{pkg}/domains/__init__.py",
     "src/{pkg}/domains/auth",
     "src/{pkg}/domains/auth/__init__.py",
+    # shared 도메인 (DDD 공유 커널)
+    "src/{pkg}/domains/shared",
+    "src/{pkg}/domains/shared/__init__.py",
+    "src/{pkg}/domains/shared/base.py",
+    "src/{pkg}/domains/shared/events.py",
+    "src/{pkg}/domains/shared/types.py",
     # 테스트
     "tests",
     "tests/__init__.py",
     "tests/auth",
     "tests/auth/__init__.py",
+    "tests/shared",
+    "tests/shared/__init__.py",
     # scripts
     "scripts",
     "scripts/wait_for_services.sh",
@@ -170,8 +178,9 @@ SCENARIOS: list[Scenario] = [
             # OAuth
             "src/{pkg}/domains/auth/oauth",
             "src/{pkg}/domains/auth/oauth/__init__.py",
-            # pre-commit
+            # pre-commit (AC 17: ruff + mypy 변경 파일 실행 설정)
             ".pre-commit-config.yaml",
+            ".secrets.baseline",
         ],
         forbidden_paths=[],
         content_contains={
@@ -209,9 +218,22 @@ SCENARIOS: list[Scenario] = [
             "alembic.ini": [
                 "script_location = alembic",
             ],
+            # ── pre-commit "changed files only" 행동 마커 검증 (AC 17) ──────────────
+            # ruff: astral-sh/ruff-pre-commit 공식 훅 → pre-commit이 staged 파일만 전달
+            # mypy: pass_filenames: false + files: ^src/ → src/ 변경 시에만 트리거
             ".pre-commit-config.yaml": [
                 "ruff",
                 "mypy",
+                # ruff — 공식 pre-commit 훅 저장소 (staged 파일을 자동 전달)
+                "astral-sh/ruff-pre-commit",
+                # ruff — auto-fix 후 재-staged 강제 (changed files only 보장)
+                "--exit-non-zero-on-fix",
+                # mypy — src/ 변경 파일이 있을 때만 트리거
+                "files: ^src/",
+                # mypy — 개별 파일 대신 src/ 전체 컨텍스트로 실행
+                "pass_filenames: false",
+                # mypy — 프로젝트 로컬 mypy 사용 (uv run 경유)
+                "uv run mypy",
             ],
             # ── Dockerfile 멀티스테이지 빌드 구조 검증 (Sub-AC 3.1) ──────────────
             # runtime 스테이지가 builder의 dev 도구를 복사하지 않는지 확인:
@@ -246,9 +268,11 @@ SCENARIOS: list[Scenario] = [
         },
         content_excludes={
             "pyproject.toml": [
+                "sse-starlette",      # SSE 스트리밍은 chat 도메인 전용 의존성
                 "langchain",
                 "langchain-litellm",
                 "litellm",
+                "tenacity",           # LLM 재시도 로직도 함께 제거
             ],
             # NOTE: Dockerfile에는 langchain 미포함 검사를 하지 않음.
             #       Dockerfile은 chat 토글을 위한 Jinja2 conditional 블록이 없고,
@@ -293,11 +317,13 @@ SCENARIOS: list[Scenario] = [
     # ------------------------------------------------------------------
     Scenario(
         name="no_pre_commit",
-        description="use_pre_commit=no — .pre-commit-config.yaml 제거 검증",
+        description="use_pre_commit=no — .pre-commit-config.yaml + .secrets.baseline 제거 검증",
         extra_context={"use_pre_commit": "no"},
         required_paths=_COMMON_REQUIRED,
         forbidden_paths=[
+            # AC 17: post_gen_project.py가 두 파일 모두 제거하는지 확인
             ".pre-commit-config.yaml",
+            ".secrets.baseline",
         ],
     ),
 
@@ -319,14 +345,19 @@ SCENARIOS: list[Scenario] = [
         forbidden_paths=[
             "src/{pkg}/domains/chat",
             "tests/chat",
+            # AC 17: use_pre_commit=no → 두 파일 모두 제거 확인
             ".pre-commit-config.yaml",
+            ".secrets.baseline",
             "src/{pkg}/domains/auth/oauth/kakao.py",
             "src/{pkg}/domains/auth/oauth/naver.py",
         ],
         content_excludes={
             "pyproject.toml": [
+                "sse-starlette",
                 "langchain",
                 "langchain-litellm",
+                "litellm",
+                "tenacity",
             ],
         },
     ),

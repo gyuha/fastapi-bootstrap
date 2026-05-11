@@ -1,8 +1,19 @@
 """FastAPI application factory.
 
-Entry point for uvicorn:
+Entry points for uvicorn:
 
-    uv run uvicorn {{ cookiecutter.package_name }}.main:app --reload
+    # Via Makefile (recommended — uses host/port from cookiecutter defaults)
+    make dev                              # installs deps, starts infra, runs app
+    make serve                            # hot-reload only (infra already running)
+
+    # Explicit uvicorn (replaces <host>/<port> with your values)
+    uv run uvicorn {{ cookiecutter.package_name }}.main:app \\
+        --host {{ cookiecutter.fastapi_host }} --port {{ cookiecutter.fastapi_port }} \\
+        --reload --reload-dir src/{{ cookiecutter.package_name }}
+
+    # Direct module execution (host/port/reload read from Settings / .env)
+    uv run python -m {{ cookiecutter.package_name }}                    # dev   — reload ON
+    APP_ENV=production uv run python -m {{ cookiecutter.package_name }} # prod  — reload OFF
 
 The ``app`` object is also importable for tests via the ``AsyncClient`` fixture.
 """

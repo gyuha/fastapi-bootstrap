@@ -87,7 +87,7 @@ from ._mocks import (
 # ---------------------------------------------------------------------------
 
 #: Patch path for ChatLiteLLM class in the llm_client module
-_LITELLM_PATH: str = "{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM"
+_LITELLM_PATH: str = "{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM"
 
 #: API endpoint paths
 _CHAT_COMPLETE_URL: str = "/api/v1/chat/complete"
@@ -136,10 +136,12 @@ class _TrackingLLMClient:
         self._response: str = response
         self.ainvoke_call_count: int = 0
         self.astream_call_count: int = 0
+        self.invoke_call_count: int = 0
+        self.stream_call_count: int = 0
         self.last_messages: list[Any] = []
 
     async def ainvoke(self, messages: Any, **kwargs: Any) -> Any:
-        """Return a pre-canned AIMessage and increment call counter."""
+        """Return a pre-canned AIMessage and increment call counter (LLMClientProtocol)."""
         from langchain_core.messages.ai import AIMessage
 
         self.ainvoke_call_count += 1
@@ -147,8 +149,23 @@ class _TrackingLLMClient:
         return AIMessage(content=self._response)
 
     async def astream(self, messages: Any, **kwargs: Any) -> Any:
-        """Yield pre-canned tokens and increment call counter."""
+        """Yield pre-canned tokens and increment call counter (LLMClientProtocol)."""
         self.astream_call_count += 1
+        self.last_messages = list(messages)
+        for token in FAKE_STREAM_TOKENS:
+            yield token
+
+    async def invoke(self, messages: Any, **kwargs: Any) -> Any:
+        """Return a pre-canned AIMessage and increment call counter (AbstractLLMPort)."""
+        from langchain_core.messages.ai import AIMessage
+
+        self.invoke_call_count += 1
+        self.last_messages = list(messages)
+        return AIMessage(content=self._response)
+
+    async def stream(self, messages: Any, **kwargs: Any) -> Any:
+        """Yield pre-canned tokens and increment call counter (AbstractLLMPort)."""
+        self.stream_call_count += 1
         self.last_messages = list(messages)
         for token in FAKE_STREAM_TOKENS:
             yield token
@@ -492,8 +509,8 @@ class TestChatAPIProviderSwitchingViaOverrides:
             chat_test_app.dependency_overrides.clear()
 
         assert response.status_code == 200
-        assert openai_client.ainvoke_call_count == 1, (
-            "Tracking client ainvoke must be called exactly once per request"
+        assert openai_client.invoke_call_count == 1, (
+            "Tracking client invoke must be called exactly once per request"
         )
         assert response.json()["content"] == "OpenAI response via DI override"
 
@@ -516,7 +533,7 @@ class TestChatAPIProviderSwitchingViaOverrides:
             chat_test_app.dependency_overrides.clear()
 
         assert response.status_code == 200
-        assert ollama_client.ainvoke_call_count == 1
+        assert ollama_client.invoke_call_count == 1
         assert response.json()["content"] == "Ollama response via DI override"
 
     def test_switching_factory_override_routes_to_different_client(
@@ -559,11 +576,11 @@ class TestChatAPIProviderSwitchingViaOverrides:
         assert r2.status_code == 200
         assert r1.json()["content"] == "I am OpenAI"
         assert r2.json()["content"] == "I am Ollama"
-        assert openai_client.ainvoke_call_count == 1
-        assert ollama_client.ainvoke_call_count == 1
+        assert openai_client.invoke_call_count == 1
+        assert ollama_client.invoke_call_count == 1
         # Cross-check: each client was called exactly once for its scenario
-        assert openai_client.ainvoke_call_count != ollama_client.ainvoke_call_count or (
-            openai_client.ainvoke_call_count == ollama_client.ainvoke_call_count == 1
+        assert openai_client.invoke_call_count != ollama_client.invoke_call_count or (
+            openai_client.invoke_call_count == ollama_client.invoke_call_count == 1
         )
 
     def test_tracking_client_captures_messages(
@@ -684,8 +701,8 @@ class TestChatAPIStreamingProviderRouting:
         finally:
             chat_test_app.dependency_overrides.clear()
 
-        assert tracking_client.astream_call_count == 1, (
-            f"astream must be called exactly once; got {tracking_client.astream_call_count}"
+        assert tracking_client.stream_call_count == 1, (
+            f"stream must be called exactly once; got {tracking_client.stream_call_count}"
         )
 
     def test_stream_done_sentinel_present(

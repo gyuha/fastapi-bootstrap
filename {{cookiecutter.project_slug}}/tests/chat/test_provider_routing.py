@@ -104,7 +104,7 @@ def _capture_litellm_kwargs() -> tuple[dict[str, Any], MagicMock]:
     Usage::
 
         captured, mock_cls = _capture_litellm_kwargs()
-        with patch("...llm_client.ChatLiteLLM", mock_cls):
+        with patch("...infra.llm.provider_factory.ChatLiteLLM", mock_cls):
             LLMClient(settings=my_settings)
         assert captured["model"] == "openai/gpt-4o-mini"
     """
@@ -118,7 +118,7 @@ def _capture_litellm_kwargs() -> tuple[dict[str, Any], MagicMock]:
     return captured, mock_cls
 
 
-_CHAT_LITELLM_PATH = "{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM"
+_CHAT_LITELLM_PATH = "{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM"
 _GET_SETTINGS_PATH = "{{ cookiecutter.package_name }}.domains.chat.llm_client.get_settings"
 
 

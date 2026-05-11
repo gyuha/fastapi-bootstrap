@@ -102,8 +102,10 @@ ipython_config.py
 
 
 # ── Environment ───────────────────────────────────────────────────────────────
-# .env.example is tracked; .env contains real secrets — never commit it
+# .env.example / .env.prod.example are tracked (templates with no real secrets)
+# .env / .env.prod contain real secrets — NEVER commit them
 .env
+.env.prod
 .env.local
 .env.*.local
 .envrc           # direnv

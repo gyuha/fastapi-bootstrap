@@ -107,7 +107,10 @@ def _get_sync_db_url() -> str:
         "No database URL configured for Alembic.\n"
         "Set DATABASE_URL_SYNC (preferred) or DATABASE_URL in your .env file.\n"
         "Example:\n"
-        "  DATABASE_URL_SYNC=postgresql+psycopg2://app:app@localhost:5432/app_db"
+        "  DATABASE_URL_SYNC=postgresql+psycopg2://"
+        "{{ cookiecutter.postgres_user }}:{{ cookiecutter.postgres_password }}"
+        "@{{ cookiecutter.postgres_host }}:{{ cookiecutter.postgres_port }}"
+        "/{{ cookiecutter.postgres_db }}"
     )
 
 

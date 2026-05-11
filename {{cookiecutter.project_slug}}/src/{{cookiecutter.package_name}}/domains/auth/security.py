@@ -47,8 +47,8 @@ logger = structlog.get_logger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
-REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+ACCESS_TOKEN_EXPIRE_MINUTES: int = {{ cookiecutter.jwt_access_ttl_minutes }}
+REFRESH_TOKEN_EXPIRE_DAYS: int = {{ cookiecutter.jwt_refresh_ttl_days }}
 JWT_ALGORITHM: str = "HS256"
 
 # ---------------------------------------------------------------------------

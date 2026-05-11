@@ -141,6 +141,7 @@ class PasswordResetConfirmResponse(BaseModel):
 # OAuth
 # ---------------------------------------------------------------------------
 
+{% if cookiecutter.oauth_providers != "none" %}
 
 class OAuthLoginURLResponse(BaseModel):
     """Response body for GET /auth/oauth/{provider}/login."""
@@ -148,6 +149,7 @@ class OAuthLoginURLResponse(BaseModel):
     authorization_url: str
     state: str
 
+{% endif %}
 
 # ---------------------------------------------------------------------------
 # RBAC

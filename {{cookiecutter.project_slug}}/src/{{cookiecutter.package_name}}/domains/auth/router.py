@@ -10,16 +10,26 @@ POST   /auth/logout                     Revoke tokens
 POST   /auth/password-reset             Request password-reset email
 POST   /auth/password-reset/confirm     Apply reset token + new password
 GET    /auth/me                         Current authenticated user
+{% if cookiecutter.oauth_providers != "none" %}
 GET    /auth/oauth/{provider}/login     OAuth2 authorization URL
 GET    /auth/oauth/{provider}/callback  OAuth2 callback — exchange code
+{% endif %}
 """
 
 from __future__ import annotations
 
+{% if cookiecutter.oauth_providers != "none" %}
 from typing import Annotated, Any
+{% else %}
+from typing import Any
+{% endif %}
 
 import structlog
+{% if cookiecutter.oauth_providers != "none" %}
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+{% else %}
+from fastapi import APIRouter, Depends, HTTPException, status
+{% endif %}
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,7 +41,9 @@ from {{ cookiecutter.package_name }}.domains.auth.repository import AuthReposito
 from {{ cookiecutter.package_name }}.domains.auth.schemas import (
     LoginRequest,
     LogoutRequest,
+{% if cookiecutter.oauth_providers != "none" %}
     OAuthLoginURLResponse,
+{% endif %}
     PasswordResetConfirmRequest,
     PasswordResetConfirmResponse,
     PasswordResetRequest,
@@ -241,6 +253,7 @@ async def get_me(current_user: Any = Depends(get_current_user)) -> UserResponse:
     return UserResponse.model_validate(current_user)
 
 
+{% if cookiecutter.oauth_providers != "none" %}
 # ---------------------------------------------------------------------------
 # OAuth endpoints
 # ---------------------------------------------------------------------------
@@ -261,7 +274,7 @@ async def oauth_login(
     """Generate an OAuth2 authorization URL for the given provider.
 
     The returned ``state`` nonce is stored in Redis for CSRF validation in the
-    callback.  Supported providers: ``google``, ``kakao``, ``naver``.
+    callback.  Supported providers: {{ cookiecutter.oauth_providers }}.
 
     Raises
     ------
@@ -315,10 +328,14 @@ async def oauth_callback(
     adapter = _get_oauth_adapter(provider, s)
 
     try:
+{% if "naver" in cookiecutter.oauth_providers %}
         if provider == "naver":
             user_info = await adapter.exchange_code(code, state)  # type: ignore[attr-defined]
         else:
             user_info = await adapter.exchange_code(code)  # type: ignore[attr-defined]
+{% else %}
+        user_info = await adapter.exchange_code(code)  # type: ignore[attr-defined]
+{% endif %}
     except Exception as exc:
         logger.error("oauth_exchange_failed", provider=provider, error=str(exc))
         raise HTTPException(
@@ -358,25 +375,34 @@ async def oauth_callback(
 def _get_oauth_adapter(provider: str, settings: Any) -> Any:
     """Return the OAuth adapter for *provider*.
 
+    Supported providers: {{ cookiecutter.oauth_providers }}.
+
     Raises
     ------
     HTTPException 400
-        If *provider* is unsupported.
+        If *provider* is unsupported or not included in this project.
     """
+{% if "google" in cookiecutter.oauth_providers %}
     if provider == "google":
         from {{ cookiecutter.package_name }}.domains.auth.oauth.google import GoogleOAuthAdapter  # noqa: PLC0415
 
         return GoogleOAuthAdapter(settings)
-    elif provider == "kakao":
+{% endif %}
+{% if "kakao" in cookiecutter.oauth_providers %}
+    if provider == "kakao":
         from {{ cookiecutter.package_name }}.domains.auth.oauth.kakao import KakaoOAuthAdapter  # noqa: PLC0415
 
         return KakaoOAuthAdapter(settings)
-    elif provider == "naver":
+{% endif %}
+{% if "naver" in cookiecutter.oauth_providers %}
+    if provider == "naver":
         from {{ cookiecutter.package_name }}.domains.auth.oauth.naver import NaverOAuthAdapter  # noqa: PLC0415
 
         return NaverOAuthAdapter(settings)
-    else:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unsupported OAuth provider: '{provider}'. Supported: google, kakao, naver.",
-        )
+{% endif %}
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=f"Unsupported OAuth provider: '{provider}'. Configured: {{ cookiecutter.oauth_providers }}.",
+    )
+
+{% endif %}

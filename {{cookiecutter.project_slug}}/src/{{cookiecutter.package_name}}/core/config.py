@@ -40,6 +40,14 @@ class LLMProvider(str, Enum):
 
     The value is used as the litellm provider prefix, e.g. ``openai/gpt-4o``.
     Switching providers requires only changing ``LLM_PROVIDER`` in .env.
+
+    Supported values
+    ----------------
+    * ``openai``    — OpenAI (GPT-4o, GPT-4o-mini, …)
+    * ``anthropic`` — Anthropic (Claude 3.5 Sonnet, Claude 3.5 Haiku, …)
+    * ``gemini``    — Google Gemini (gemini-1.5-flash, gemini-2.0-flash, …)
+    * ``azure``     — Azure OpenAI (uses deployment name instead of model)
+    * ``ollama``    — Local Ollama inference server (no API key required)
     """
 
     openai = "openai"
@@ -90,11 +98,33 @@ class LLMSettings(BaseSettings):
     )
 
     # ── Core ──────────────────────────────────────────────────────────────────
-    # env: LLM_PROVIDER
+    # env: LLM_PROVIDER  (required — must be one of the LLMProvider enum values)
     provider: LLMProvider = LLMProvider("{{ cookiecutter.llm_provider }}")
 
     # env: LLM_DEFAULT_MODEL
     default_model: str = "{{ cookiecutter.llm_default_model }}"
+
+    # ── Generation parameters ─────────────────────────────────────────────────
+    # env: LLM_TEMPERATURE  (0.0 = deterministic, 2.0 = maximum creativity)
+    temperature: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=2.0,
+        description="Sampling temperature. 0.0 is deterministic; 2.0 is highly creative.",
+    )
+
+    # env: LLM_MAX_TOKENS
+    max_tokens: int = Field(
+        default=2048,
+        gt=0,
+        description="Maximum number of tokens to generate in the response.",
+    )
+
+    # env: LLM_STREAMING  (set to false to disable SSE streaming globally)
+    streaming: bool = Field(
+        default=True,
+        description="Enable streaming responses via SSE by default.",
+    )
 
     # ── Per-provider credentials (no LLM_ prefix — use field aliases) ─────────
     openai_api_key: SecretStr = Field(
@@ -130,6 +160,32 @@ class LLMSettings(BaseSettings):
         default="http://localhost:11434",
         alias="OLLAMA_BASE_URL",
     )
+
+    # ── Validators ────────────────────────────────────────────────────────────
+
+    @field_validator("provider", mode="before")
+    @classmethod
+    def _validate_provider(cls, v: Any) -> Any:
+        """Validate LLM_PROVIDER value and emit a clear error for unsupported names.
+
+        Pydantic's Enum coercion already catches invalid values, but this
+        validator surfaces all supported provider names in the error message
+        so that mis-configured environments are easy to diagnose.
+
+        Example error::
+
+            ValueError: LLM_PROVIDER='gpt4' is not supported.
+            Supported providers: anthropic, azure, gemini, ollama, openai.
+            Set LLM_PROVIDER in .env to one of the listed values.
+        """
+        valid = sorted(p.value for p in LLMProvider)
+        if isinstance(v, str) and v not in valid:
+            raise ValueError(
+                f"LLM_PROVIDER={v!r} is not supported. "
+                f"Supported providers: {', '.join(valid)}. "
+                "Set LLM_PROVIDER in .env to one of the listed values."
+            )
+        return v
 
     # ── Derived helpers ───────────────────────────────────────────────────────
 
@@ -171,11 +227,22 @@ class LLMSettings(BaseSettings):
     def as_litellm_kwargs(self) -> dict[str, Any]:
         """Return kwargs dict suitable for ``ChatLiteLLM(**kwargs)``.
 
-        Includes ``model``, ``api_key``, and provider-specific params
-        (``api_base`` for Ollama/Azure, ``api_version`` for Azure).
+        Includes ``model``, generation parameters (``temperature``,
+        ``max_tokens``, ``streaming``), ``api_key``, and provider-specific
+        params (``api_base`` for Ollama/Azure, ``api_version`` for Azure).
+
         Provider switching is transparent — change ``LLM_PROVIDER`` in .env.
+
+        The generation parameters (``LLM_TEMPERATURE``, ``LLM_MAX_TOKENS``,
+        ``LLM_STREAMING``) can be overridden globally via environment variables
+        or per-request by passing override kwargs to :class:`LLMClient`.
         """
-        kwargs: dict[str, Any] = {"model": self.litellm_model}
+        kwargs: dict[str, Any] = {
+            "model": self.litellm_model,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+            "streaming": self.streaming,
+        }
 
         if self.provider == LLMProvider.azure:
             kwargs["api_key"] = self.azure_openai_api_key.get_secret_value()
@@ -268,6 +335,7 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = {{ cookiecutter.jwt_access_ttl_minutes }}
     jwt_refresh_token_expire_days: int = {{ cookiecutter.jwt_refresh_ttl_days }}
 
+{% if cookiecutter.oauth_providers != "none" %}
     # ── OAuth ─────────────────────────────────────────────────────────────────
     google_client_id: str = ""
     google_client_secret: SecretStr = SecretStr("")
@@ -281,6 +349,7 @@ class Settings(BaseSettings):
     naver_client_secret: SecretStr = SecretStr("")
     naver_redirect_uri: str = ""
 
+{% endif %}
     # ── Email ─────────────────────────────────────────────────────────────────
     mail_server: str = "localhost"
     mail_port: int = {{ cookiecutter.mailpit_smtp_port }}
@@ -293,10 +362,17 @@ class Settings(BaseSettings):
 
 {% if cookiecutter.include_chat_domain == "yes" %}
     # ── LLM / Chat domain ─────────────────────────────────────────────────────
-    # env: LLM_PROVIDER
+    # env: LLM_PROVIDER  Supported: openai | anthropic | gemini | azure | ollama
     llm_provider: LLMProvider = LLMProvider("{{ cookiecutter.llm_provider }}")
     # env: LLM_DEFAULT_MODEL
     llm_default_model: str = "{{ cookiecutter.llm_default_model }}"
+
+    # env: LLM_TEMPERATURE  (0.0 = deterministic, 2.0 = maximum creativity)
+    llm_temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    # env: LLM_MAX_TOKENS
+    llm_max_tokens: int = Field(default=2048, gt=0)
+    # env: LLM_STREAMING  (false to disable global SSE streaming)
+    llm_streaming: bool = True
 
     # Provider credentials — set only the key for the active provider
     openai_api_key: SecretStr = SecretStr("")
@@ -309,6 +385,19 @@ class Settings(BaseSettings):
     azure_openai_api_version: str = "2024-08-01-preview"
 
     ollama_base_url: str = "http://localhost:11434"
+
+    @field_validator("llm_provider", mode="before")
+    @classmethod
+    def _validate_llm_provider(cls, v: Any) -> Any:
+        """Validate LLM_PROVIDER in root Settings with a helpful error message."""
+        valid = sorted(p.value for p in LLMProvider)
+        if isinstance(v, str) and v not in valid:
+            raise ValueError(
+                f"LLM_PROVIDER={v!r} is not supported. "
+                f"Supported providers: {', '.join(valid)}. "
+                "Set LLM_PROVIDER in .env to one of the listed values."
+            )
+        return v
 
 {% endif %}
     # ── Frontend ──────────────────────────────────────────────────────────────
@@ -450,6 +539,9 @@ class Settings(BaseSettings):
         return LLMSettings(
             provider=self.llm_provider,
             default_model=self.llm_default_model,
+            temperature=self.llm_temperature,
+            max_tokens=self.llm_max_tokens,
+            streaming=self.llm_streaming,
             # Aliases are accepted by populate_by_name=True
             OPENAI_API_KEY=self.openai_api_key,
             ANTHROPIC_API_KEY=self.anthropic_api_key,

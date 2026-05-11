@@ -41,7 +41,12 @@ from {{ cookiecutter.package_name }}.core.config import (
 
 
 def make_settings(**env_overrides: str) -> Settings:
-    """Create a Settings instance with env isolated from the real .env file.
+    """Create a Settings instance completely isolated from os.environ and .env.
+
+    Uses ``clear=True`` to start from an empty environment, then adds only the
+    required base keys and any caller-supplied overrides.  This prevents third-
+    party libraries (e.g. *litellm*) that call ``load_dotenv()`` at import time
+    from leaking ``.env`` values into subsequent tests.
 
     Pass env var names (uppercase) as keyword arguments, e.g.::
 
@@ -52,7 +57,7 @@ def make_settings(**env_overrides: str) -> Settings:
         "JWT_SECRET_KEY": "test-jwt-secret",
     }
     base_env.update(env_overrides)
-    with patch.dict(os.environ, base_env, clear=False):
+    with patch.dict(os.environ, base_env, clear=True):
         get_settings.cache_clear()
         # _env_file=None prevents pydantic-settings from reading .env
         s = Settings(_env_file=None)  # type: ignore[call-arg]
@@ -67,7 +72,7 @@ def make_settings(**env_overrides: str) -> Settings:
 
 class TestAppSettings:
     def test_defaults(self) -> None:
-        s = Settings(_env_file=None)  # type: ignore[call-arg]
+        s = make_settings()
         assert s.app_env == AppEnv.development
         assert s.app_debug is False
         assert s.host == "{{ cookiecutter.fastapi_host }}"
@@ -98,7 +103,7 @@ class TestAppSettings:
         assert s.log_level == "DEBUG"
 
     def test_log_format_json_default(self) -> None:
-        s = Settings(_env_file=None)  # type: ignore[call-arg]
+        s = make_settings()
         assert s.log_format == LogFormat.json
 
 
@@ -164,7 +169,7 @@ class TestRedisDSN:
 
 class TestJWTSettings:
     def test_default_ttls(self) -> None:
-        s = Settings(_env_file=None)  # type: ignore[call-arg]
+        s = make_settings()
         assert s.jwt_access_token_expire_minutes == {{ cookiecutter.jwt_access_ttl_minutes }}
         assert s.jwt_refresh_token_expire_days == {{ cookiecutter.jwt_refresh_ttl_days }}
         assert s.jwt_algorithm == "HS256"
@@ -188,7 +193,7 @@ class TestEmailSettings:
 
     def test_defaults_match_mailpit(self) -> None:
         """Default email settings point to Mailpit on localhost."""
-        s = Settings(_env_file=None)  # type: ignore[call-arg]
+        s = make_settings()
         assert s.mail_server == "localhost"
         assert s.mail_port == {{ cookiecutter.mailpit_smtp_port }}
         assert s.mail_starttls is False
@@ -198,7 +203,7 @@ class TestEmailSettings:
         assert s.mail_password.get_secret_value() == ""
 
     def test_mail_from_uses_project_slug(self) -> None:
-        s = Settings(_env_file=None)  # type: ignore[call-arg]
+        s = make_settings()
         assert "{{ cookiecutter.project_slug }}" in s.mail_from
         assert s.mail_from_name == "{{ cookiecutter.project_name }}"
 
@@ -225,7 +230,7 @@ class TestEmailSettings:
 
     def test_mail_connection_config_dev_defaults(self) -> None:
         """mail_connection_config returns correct kwargs for Mailpit (dev)."""
-        s = Settings(_env_file=None)  # type: ignore[call-arg]
+        s = make_settings()
         cfg = s.mail_connection_config
 
         assert cfg["MAIL_SERVER"] == "localhost"
@@ -259,7 +264,7 @@ class TestEmailSettings:
 
     def test_mail_connection_config_keys(self) -> None:
         """mail_connection_config contains all keys required by fastapi-mail."""
-        s = Settings(_env_file=None)  # type: ignore[call-arg]
+        s = make_settings()
         cfg = s.mail_connection_config
         required_keys = {
             "MAIL_USERNAME",
@@ -353,7 +358,7 @@ class TestContainerConnectivity:
 
     def test_default_host_is_localhost(self) -> None:
         """Default configuration targets localhost (host-to-container dev mode)."""
-        s = Settings(_env_file=None)  # type: ignore[call-arg]
+        s = make_settings()
         assert s.postgres_host == "{{ cookiecutter.postgres_host }}"
         assert s.redis_host == "{{ cookiecutter.redis_host }}"
         assert s.mail_server == "localhost"
@@ -374,6 +379,49 @@ class TestLLMProvider:
     def test_all_provider_values_in_enum(self) -> None:
         values = {p.value for p in LLMProvider}
         assert values == {"openai", "anthropic", "gemini", "azure", "ollama"}
+
+    def test_provider_env_var_name_is_llm_provider(self) -> None:
+        """LLM_PROVIDER is the canonical env var for provider selection."""
+        s = LLMSettings(provider=LLMProvider.anthropic, default_model="claude-3-5-haiku-20241022")
+        assert s.provider == LLMProvider.anthropic
+
+    def test_invalid_provider_raises_with_helpful_message(self) -> None:
+        """Unsupported LLM_PROVIDER should raise ValueError with all valid values listed."""
+        with pytest.raises((ValueError, Exception)) as exc_info:
+            LLMSettings(provider="cohere", default_model="command-r")  # type: ignore[arg-type]
+        err = str(exc_info.value)
+        # Must mention the bad value
+        assert "cohere" in err
+        # Must list valid providers
+        assert "openai" in err
+
+    def test_temperature_defaults_and_range(self) -> None:
+        s = LLMSettings(provider=LLMProvider.openai, default_model="gpt-4o")
+        assert 0.0 <= s.temperature <= 2.0
+        assert s.temperature == 0.7
+
+    def test_max_tokens_default(self) -> None:
+        s = LLMSettings(provider=LLMProvider.openai, default_model="gpt-4o")
+        assert s.max_tokens == 2048
+        assert s.max_tokens > 0
+
+    def test_streaming_default_is_true(self) -> None:
+        s = LLMSettings(provider=LLMProvider.openai, default_model="gpt-4o")
+        assert s.streaming is True
+
+    def test_generation_params_in_litellm_kwargs(self) -> None:
+        s = LLMSettings(
+            provider=LLMProvider.openai,
+            default_model="gpt-4o",
+            OPENAI_API_KEY="sk-test",
+            temperature=0.3,
+            max_tokens=512,
+            streaming=False,
+        )
+        kwargs = s.as_litellm_kwargs()
+        assert kwargs["temperature"] == 0.3
+        assert kwargs["max_tokens"] == 512
+        assert kwargs["streaming"] is False
 
     def test_openai(self) -> None:
         s = LLMSettings(
@@ -491,6 +539,52 @@ class TestLLMSettingsViaRootSettings:
     def test_invalid_llm_provider_raises_validation_error(self) -> None:
         with pytest.raises(Exception):  # pydantic ValidationError
             make_settings(LLM_PROVIDER="nonexistent-provider")
+
+    def test_invalid_provider_error_message_lists_valid_providers(self) -> None:
+        """ValidationError for bad LLM_PROVIDER must name all supported providers."""
+        with pytest.raises(Exception) as exc_info:
+            make_settings(LLM_PROVIDER="cohere")
+        err = str(exc_info.value)
+        # The validator message lists supported providers
+        for name in ("openai", "anthropic", "gemini", "azure", "ollama"):
+            assert name in err, f"Expected '{name}' in error message: {err}"
+
+    def test_llm_generation_params_defaults(self) -> None:
+        """Root Settings passes LLM generation defaults to LLMSettings.llm."""
+        s = make_settings(LLM_PROVIDER="openai", LLM_DEFAULT_MODEL="gpt-4o-mini")
+        llm = s.llm
+        assert llm.temperature == 0.7
+        assert llm.max_tokens == 2048
+        assert llm.streaming is True
+
+    def test_llm_generation_params_env_override(self) -> None:
+        """LLM_TEMPERATURE, LLM_MAX_TOKENS, LLM_STREAMING can be overridden via env."""
+        s = make_settings(
+            LLM_PROVIDER="openai",
+            LLM_DEFAULT_MODEL="gpt-4o",
+            LLM_TEMPERATURE="0.2",
+            LLM_MAX_TOKENS="512",
+            LLM_STREAMING="false",
+        )
+        llm = s.llm
+        assert llm.temperature == 0.2
+        assert llm.max_tokens == 512
+        assert llm.streaming is False
+
+    def test_llm_generation_params_in_kwargs(self) -> None:
+        """as_litellm_kwargs includes temperature, max_tokens, streaming."""
+        s = make_settings(
+            LLM_PROVIDER="openai",
+            LLM_DEFAULT_MODEL="gpt-4o",
+            OPENAI_API_KEY="sk-test",
+            LLM_TEMPERATURE="0.5",
+            LLM_MAX_TOKENS="1024",
+        )
+        kwargs = s.llm.as_litellm_kwargs()
+        assert kwargs["temperature"] == 0.5
+        assert kwargs["max_tokens"] == 1024
+        assert "model" in kwargs
+        assert "api_key" in kwargs
 
     def test_provider_switching_changes_litellm_model(self) -> None:
         """Demonstrate that env change is sufficient to switch providers."""

@@ -219,10 +219,10 @@ def show_service_endpoints() -> None:
                 key, _, val = line.partition("=")
                 env_vars[key.strip()] = val.strip()
 
-    pg_port = env_vars.get("POSTGRES_PORT", "5432")
-    redis_port = env_vars.get("REDIS_PORT", "6379")
-    mailpit_ui = env_vars.get("MAILPIT_UI_PORT", "8025")
-    mailpit_smtp = env_vars.get("MAILPIT_SMTP_PORT", "1025")
+    pg_port = env_vars.get("POSTGRES_PORT", "{{ cookiecutter.postgres_port }}")
+    redis_port = env_vars.get("REDIS_PORT", "{{ cookiecutter.redis_port }}")
+    mailpit_ui = env_vars.get("MAILPIT_UI_PORT", "{{ cookiecutter.mailpit_ui_port }}")
+    mailpit_smtp = env_vars.get("MAILPIT_SMTP_PORT", "{{ cookiecutter.mailpit_smtp_port }}")
     app_port = env_vars.get("PORT", "{{ cookiecutter.fastapi_port }}")
 
     log_section("서비스 접속 정보")
