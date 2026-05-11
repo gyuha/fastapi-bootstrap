@@ -225,9 +225,12 @@ class Settings(BaseSettings):
     app_env: AppEnv = AppEnv.development
     app_debug: bool = False
     secret_key: SecretStr = SecretStr("change-me-in-production")
-    cors_origins: list[str] = Field(
-        default=["http://localhost:3000", "http://localhost:{{ cookiecutter.fastapi_port }}"],
-        description="Allowed CORS origins. Accepts a list or a comma-separated string.",
+    # cors_origins stores raw value from env (str for comma-sep, list parsed from JSON).
+    # The cors_origins_list property returns the final list[str].
+    # Using str type avoids pydantic-settings v2 auto-JSON-decoding complex types.
+    cors_origins: str = Field(
+        default='["http://localhost:3000","http://localhost:{{ cookiecutter.fastapi_port }}"]',
+        description="Allowed CORS origins. JSON array or comma-separated string.",
     )
 
     # ── Server ────────────────────────────────────────────────────────────────
@@ -308,19 +311,14 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
 
 {% endif %}
+    # ── Frontend ──────────────────────────────────────────────────────────────
+    frontend_url: str = "http://localhost:3000"
+
     # ── Observability ─────────────────────────────────────────────────────────
     log_level: str = "INFO"
     log_format: LogFormat = LogFormat.json
 
     # ── Validators ────────────────────────────────────────────────────────────
-
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def _parse_cors_origins(cls, v: Any) -> list[str]:
-        """Accept a comma-separated string from env or a list."""
-        if isinstance(v, str):
-            return [o.strip() for o in v.split(",") if o.strip()]
-        return v  # type: ignore[return-value]
 
     @field_validator("log_level", mode="before")
     @classmethod
@@ -328,6 +326,26 @@ class Settings(BaseSettings):
         return str(v).upper()
 
     # ── Computed properties ───────────────────────────────────────────────────
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        """Parse cors_origins string into a list.
+
+        Accepts:
+        - JSON array: ``["http://localhost:3000","http://localhost:8000"]``
+        - Comma-separated: ``http://localhost:3000,http://localhost:8000``
+        """
+        import json as _json  # noqa: PLC0415
+
+        v = self.cors_origins.strip()
+        if v.startswith("["):
+            try:
+                result = _json.loads(v)
+                if isinstance(result, list):
+                    return [str(o) for o in result]
+            except _json.JSONDecodeError:
+                pass
+        return [o.strip() for o in v.split(",") if o.strip()]
 
     @property
     def async_database_url(self) -> str:
@@ -364,6 +382,56 @@ class Settings(BaseSettings):
         Uses ``REDIS_URL`` env var if set; otherwise builds from parts.
         """
         return self.redis_url or f"redis://{self.redis_host}:{self.redis_port}/{self.redis_db}"
+
+    @property
+    def mail_connection_config(self) -> dict[str, Any]:
+        """Return keyword arguments suitable for ``fastapi_mail.ConnectionConfig(**kwargs)``.
+
+        Assembles the email connection configuration from flat settings fields.
+        Works with both the local Mailpit dev server and production SMTP providers.
+
+        Local dev (default)::
+
+            MAIL_SERVER=localhost
+            MAIL_PORT={{ cookiecutter.mailpit_smtp_port }}     # Mailpit SMTP
+            MAIL_STARTTLS=false
+            MAIL_SSL_TLS=false
+
+        Production (e.g. SendGrid / AWS SES)::
+
+            MAIL_SERVER=smtp.sendgrid.net
+            MAIL_PORT=587
+            MAIL_USERNAME=apikey
+            MAIL_PASSWORD=SG.xxx
+            MAIL_STARTTLS=true
+            MAIL_SSL_TLS=false
+
+        Inside docker-compose (``app`` service), ``MAIL_SERVER`` is overridden
+        to ``mailpit`` (the container service name) automatically.
+
+        Usage::
+
+            from fastapi_mail import ConnectionConfig, FastMail
+            from {{ cookiecutter.package_name }}.core.config import settings
+
+            mail_config = ConnectionConfig(**settings.mail_connection_config)
+            mailer = FastMail(mail_config)
+        """
+        return {
+            "MAIL_USERNAME": self.mail_username,
+            "MAIL_PASSWORD": self.mail_password.get_secret_value(),
+            "MAIL_FROM": self.mail_from,
+            "MAIL_PORT": self.mail_port,
+            "MAIL_SERVER": self.mail_server,
+            "MAIL_FROM_NAME": self.mail_from_name,
+            "MAIL_STARTTLS": self.mail_starttls,
+            "MAIL_SSL_TLS": self.mail_ssl_tls,
+            # Credentials are only required when a username is set.
+            # Mailpit accepts anonymous SMTP, so USE_CREDENTIALS=False in dev.
+            "USE_CREDENTIALS": bool(self.mail_username),
+            # Validate TLS certs only when TLS is actually enabled.
+            "VALIDATE_CERTS": self.mail_ssl_tls or self.mail_starttls,
+        }
 
 {% if cookiecutter.include_chat_domain == "yes" %}
     @property

@@ -123,6 +123,20 @@ config.set_main_option("sqlalchemy.url", _db_url)
 try:
     from {{ cookiecutter.package_name }}.core.database import Base  # noqa: PLC0415
 
+    # Import all domain models so Alembic autogenerate can detect them.
+    # Add new model modules here when new domains are created.
+    try:
+        from {{ cookiecutter.package_name }}.domains.auth import models as _auth_models  # noqa: PLC0415, F401
+    except ImportError:
+        logger.debug("auth models not found — skipping")
+
+    {% if cookiecutter.include_chat_domain == "yes" %}
+    try:
+        from {{ cookiecutter.package_name }}.domains.chat import models as _chat_models  # noqa: PLC0415, F401
+    except ImportError:
+        logger.debug("chat models not found — skipping")
+    {% endif %}
+
     target_metadata = Base.metadata
 except ImportError:
     # Database module may not be created yet (bootstrapping phase).
