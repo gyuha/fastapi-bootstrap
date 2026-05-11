@@ -91,10 +91,10 @@ from ._mocks import (
 __all__ = [
     "FAKE_RESPONSE_TEXT",
     "FAKE_STREAM_TOKENS",
-    "OPENAI_TEST_KEY",
+    "OLLAMA_DEFAULT_MODEL",
     "OLLAMA_TEST_URL",
     "OPENAI_DEFAULT_MODEL",
-    "OLLAMA_DEFAULT_MODEL",
+    "OPENAI_TEST_KEY",
     "FakeChatLiteLLM",
     "FakeStreamingChatLiteLLM",
     "StubLLMClient",
@@ -106,7 +106,7 @@ __all__ = [
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def env_openai(monkeypatch: pytest.MonkeyPatch) -> None:
     """Set OpenAI LLM environment variables for the duration of the test.
 
@@ -134,7 +134,7 @@ def env_openai(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
 
 
-@pytest.fixture()
+@pytest.fixture
 def env_ollama(monkeypatch: pytest.MonkeyPatch) -> None:
     """Set Ollama LLM environment variables for the duration of the test.
 
@@ -166,7 +166,7 @@ def env_ollama(monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def openai_llm_settings() -> LLMSettings:
     """Return an :class:`LLMSettings` instance pre-configured for OpenAI.
 
@@ -184,7 +184,7 @@ def openai_llm_settings() -> LLMSettings:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def ollama_llm_settings() -> LLMSettings:
     """Return an :class:`LLMSettings` instance pre-configured for Ollama.
 
@@ -208,7 +208,7 @@ def ollama_llm_settings() -> LLMSettings:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def patched_chat_litellm() -> Any:  # type: ignore[misc]
     """Patch :class:`ChatLiteLLM` with a :class:`MagicMock` for the test duration.
 
@@ -230,13 +230,11 @@ def patched_chat_litellm() -> Any:  # type: ignore[misc]
             assert kwargs["temperature"] == 0.7
             assert kwargs["model"] == "openai/gpt-4o-mini"
     """
-    with patch(
-        "fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"
-    ) as mock_cls:
+    with patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM") as mock_cls:
         yield mock_cls
 
 
-@pytest.fixture()
+@pytest.fixture
 def fake_chat_litellm_openai() -> Any:  # type: ignore[misc]
     """Patch :class:`ChatLiteLLM` with a :class:`FakeChatLiteLLM` for OpenAI.
 
@@ -260,7 +258,7 @@ def fake_chat_litellm_openai() -> Any:  # type: ignore[misc]
         yield fake_instance
 
 
-@pytest.fixture()
+@pytest.fixture
 def fake_chat_litellm_ollama() -> Any:  # type: ignore[misc]
     """Patch :class:`ChatLiteLLM` with a :class:`FakeChatLiteLLM` for Ollama.
 
@@ -290,7 +288,7 @@ def fake_chat_litellm_ollama() -> Any:  # type: ignore[misc]
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def llm_client_openai(
     openai_llm_settings: LLMSettings,
     fake_chat_litellm_openai: FakeChatLiteLLM,
@@ -321,7 +319,7 @@ def llm_client_openai(
     return LLMClient(settings=openai_llm_settings)
 
 
-@pytest.fixture()
+@pytest.fixture
 def llm_client_ollama(
     ollama_llm_settings: LLMSettings,
     fake_chat_litellm_ollama: FakeChatLiteLLM,
@@ -355,7 +353,7 @@ def llm_client_ollama(
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_llm_client() -> MagicMock:
     """Return a :class:`MagicMock` satisfying both :class:`LLMClientProtocol` and :class:`AbstractLLMPort`.
 
@@ -393,7 +391,7 @@ def mock_llm_client() -> MagicMock:
     return mock
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_llm_client_openai() -> MagicMock:
     """Return a :class:`MagicMock` satisfying both protocols, wired for OpenAI.
 
@@ -424,7 +422,7 @@ def mock_llm_client_openai() -> MagicMock:
     return mock
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_llm_client_ollama() -> MagicMock:
     """Return a :class:`MagicMock` satisfying both protocols, wired for Ollama.
 
@@ -460,7 +458,7 @@ def mock_llm_client_ollama() -> MagicMock:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def stub_llm_client() -> LLMClientProtocol:
     """Return a minimal stub satisfying :class:`LLMClientProtocol` (no patches).
 
@@ -484,7 +482,7 @@ def stub_llm_client() -> LLMClientProtocol:
     return StubLLMClient(response=FAKE_RESPONSE_TEXT)  # type: ignore[return-value]
 
 
-@pytest.fixture()
+@pytest.fixture
 def streaming_stub_llm_client() -> LLMClientProtocol:
     """Return a stub :class:`LLMClientProtocol` that yields :data:`FAKE_STREAM_TOKENS`.
 
@@ -514,7 +512,7 @@ def streaming_stub_llm_client() -> LLMClientProtocol:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def stub_chat_service(stub_llm_client: LLMClientProtocol) -> ChatService:
     """Return a :class:`ChatService` backed by :func:`stub_llm_client`.
 
@@ -535,7 +533,7 @@ def stub_chat_service(stub_llm_client: LLMClientProtocol) -> ChatService:
     return ChatService(llm_client=stub_llm_client)
 
 
-@pytest.fixture()
+@pytest.fixture
 def chat_service_openai(llm_client_openai: Any) -> ChatService:
     """Return a :class:`ChatService` backed by :func:`llm_client_openai`.
 
@@ -550,7 +548,7 @@ def chat_service_openai(llm_client_openai: Any) -> ChatService:
     return ChatService(llm_client=llm_client_openai)
 
 
-@pytest.fixture()
+@pytest.fixture
 def chat_service_ollama(llm_client_ollama: Any) -> ChatService:
     """Return a :class:`ChatService` backed by :func:`llm_client_ollama`.
 

@@ -163,9 +163,13 @@ class TestSignup:
         assert isinstance(ev.created_at, datetime)
         assert started_at <= ev.created_at <= datetime.now(UTC)
         assert ev.expires_at.tzinfo is not None
-        assert timedelta(hours=23, minutes=59) <= ev.expires_at - ev.created_at <= timedelta(
-            hours=24,
-            minutes=1,
+        assert (
+            timedelta(hours=23, minutes=59)
+            <= ev.expires_at - ev.created_at
+            <= timedelta(
+                hours=24,
+                minutes=1,
+            )
         )
 
     async def test_signup_duplicate_email_raises_conflict(
@@ -173,7 +177,7 @@ class TestSignup:
         auth_service: AuthService,
         fake_repo: Any,
     ) -> None:
-        from fastapi_bootstrap.core.exceptions import ConflictError  # noqa: PLC0415
+        from fastapi_bootstrap.core.exceptions import ConflictError
 
         await auth_service.signup(_EMAIL, _PASSWORD)
         with pytest.raises(ConflictError, match="already exists"):
@@ -184,7 +188,7 @@ class TestSignup:
         auth_service: AuthService,
         fake_repo: Any,
     ) -> None:
-        from fastapi_bootstrap.core.exceptions import ConflictError  # noqa: PLC0415
+        from fastapi_bootstrap.core.exceptions import ConflictError
 
         await auth_service.signup("alice@example.com", _PASSWORD, "Alice")
 
@@ -289,7 +293,7 @@ class TestVerifyEmail:
         self,
         auth_service: AuthService,
     ) -> None:
-        from fastapi_bootstrap.core.exceptions import UnauthorizedError  # noqa: PLC0415
+        from fastapi_bootstrap.core.exceptions import UnauthorizedError
 
         with pytest.raises(UnauthorizedError, match="Invalid"):
             await auth_service.verify_email("nonexistent-token")
@@ -299,7 +303,7 @@ class TestVerifyEmail:
         auth_service: AuthService,
         fake_repo: Any,
     ) -> None:
-        from fastapi_bootstrap.core.exceptions import UnauthorizedError  # noqa: PLC0415
+        from fastapi_bootstrap.core.exceptions import UnauthorizedError
 
         user, raw_token = await auth_service.signup(_EMAIL, _PASSWORD)
         await auth_service.verify_email(raw_token)
@@ -312,7 +316,7 @@ class TestVerifyEmail:
         auth_service: AuthService,
         fake_repo: Any,
     ) -> None:
-        from fastapi_bootstrap.core.exceptions import UnauthorizedError  # noqa: PLC0415
+        from fastapi_bootstrap.core.exceptions import UnauthorizedError
 
         user, raw_token = await auth_service.signup(_EMAIL, _PASSWORD)
 
@@ -332,9 +336,7 @@ class TestVerifyEmail:
 class TestLogin:
     """login() — credential validation + JWT pair issuance."""
 
-    async def _signup_and_verify(
-        self, auth_service: AuthService, fake_repo: Any
-    ) -> Any:
+    async def _signup_and_verify(self, auth_service: AuthService, fake_repo: Any) -> Any:
         user, raw_token = await auth_service.signup(_EMAIL, _PASSWORD)
         await auth_service.verify_email(raw_token)
         return user
@@ -395,7 +397,7 @@ class TestLogin:
         auth_service: AuthService,
         fake_repo: Any,
     ) -> None:
-        from fastapi_bootstrap.core.exceptions import UnauthorizedError  # noqa: PLC0415
+        from fastapi_bootstrap.core.exceptions import UnauthorizedError
 
         await self._signup_and_verify(auth_service, fake_repo)
         with pytest.raises(UnauthorizedError):
@@ -405,7 +407,7 @@ class TestLogin:
         self,
         auth_service: AuthService,
     ) -> None:
-        from fastapi_bootstrap.core.exceptions import UnauthorizedError  # noqa: PLC0415
+        from fastapi_bootstrap.core.exceptions import UnauthorizedError
 
         with pytest.raises(UnauthorizedError):
             await auth_service.login("nobody@example.com", _PASSWORD)
@@ -415,7 +417,7 @@ class TestLogin:
         auth_service: AuthService,
         fake_repo: Any,
     ) -> None:
-        from fastapi_bootstrap.core.exceptions import UnauthorizedError  # noqa: PLC0415
+        from fastapi_bootstrap.core.exceptions import UnauthorizedError
 
         user, raw_token = await auth_service.signup(_EMAIL, _PASSWORD)
         await auth_service.verify_email(raw_token)
@@ -433,9 +435,7 @@ class TestLogin:
 class TestRefresh:
     """refresh() — token rotation + reuse detection."""
 
-    async def _get_tokens(
-        self, auth_service: AuthService, fake_repo: Any
-    ) -> dict[str, Any]:
+    async def _get_tokens(self, auth_service: AuthService, fake_repo: Any) -> dict[str, Any]:
         user, raw_token = await auth_service.signup(_EMAIL, _PASSWORD)
         await auth_service.verify_email(raw_token)
         return await auth_service.login(_EMAIL, _PASSWORD)
@@ -534,7 +534,7 @@ class TestRefresh:
         auth_service: AuthService,
         fake_repo: Any,
     ) -> None:
-        from fastapi_bootstrap.core.exceptions import UnauthorizedError  # noqa: PLC0415
+        from fastapi_bootstrap.core.exceptions import UnauthorizedError
 
         tokens = await self._get_tokens(auth_service, fake_repo)
         old_refresh = tokens["refresh_token"]
@@ -562,7 +562,7 @@ class TestRefresh:
         fake_repo: Any,
     ) -> None:
         """Using a revoked token should revoke ALL family tokens."""
-        from fastapi_bootstrap.core.exceptions import UnauthorizedError  # noqa: PLC0415
+        from fastapi_bootstrap.core.exceptions import UnauthorizedError
 
         tokens = await self._get_tokens(auth_service, fake_repo)
         old_refresh = tokens["refresh_token"]
@@ -677,7 +677,7 @@ class TestRefresh:
         auth_service: AuthService,
         fake_repo: Any,
     ) -> None:
-        from fastapi_bootstrap.core.exceptions import UnauthorizedError  # noqa: PLC0415
+        from fastapi_bootstrap.core.exceptions import UnauthorizedError
 
         with pytest.raises(UnauthorizedError):
             await auth_service.refresh("not-a-valid-jwt")
@@ -769,9 +769,7 @@ class TestRefresh:
 class TestLogout:
     """logout() — refresh token revocation + access token blacklisting."""
 
-    async def _get_tokens(
-        self, auth_service: AuthService, fake_repo: Any
-    ) -> dict[str, Any]:
+    async def _get_tokens(self, auth_service: AuthService, fake_repo: Any) -> dict[str, Any]:
         user, raw_token = await auth_service.signup(_EMAIL, _PASSWORD)
         await auth_service.verify_email(raw_token)
         return await auth_service.login(_EMAIL, _PASSWORD)
@@ -781,7 +779,7 @@ class TestLogout:
         auth_service: AuthService,
         fake_repo: Any,
     ) -> None:
-        from fastapi_bootstrap.core.exceptions import UnauthorizedError  # noqa: PLC0415
+        from fastapi_bootstrap.core.exceptions import UnauthorizedError
 
         tokens = await self._get_tokens(auth_service, fake_repo)
         await auth_service.logout(tokens["refresh_token"])
@@ -848,9 +846,7 @@ class TestLogout:
 class TestPasswordReset:
     """password reset flow — request + confirm."""
 
-    async def _registered_user(
-        self, auth_service: AuthService, fake_repo: Any
-    ) -> Any:
+    async def _registered_user(self, auth_service: AuthService, fake_repo: Any) -> Any:
         user, raw_token = await auth_service.signup(_EMAIL, _PASSWORD)
         await auth_service.verify_email(raw_token)
         return user
@@ -951,7 +947,7 @@ class TestPasswordReset:
         await service.confirm_password_reset(raw_token, new_password)
 
         # Old password should no longer work
-        from fastapi_bootstrap.core.exceptions import UnauthorizedError  # noqa: PLC0415
+        from fastapi_bootstrap.core.exceptions import UnauthorizedError
 
         with pytest.raises(UnauthorizedError):
             await service.login(_EMAIL, _PASSWORD)
@@ -965,7 +961,7 @@ class TestPasswordReset:
         auth_service: AuthService,
         fake_repo: Any,
     ) -> None:
-        from fastapi_bootstrap.core.exceptions import UnauthorizedError  # noqa: PLC0415
+        from fastapi_bootstrap.core.exceptions import UnauthorizedError
 
         with pytest.raises(UnauthorizedError, match="Invalid"):
             await auth_service.confirm_password_reset("invalid-token", "NewPass1!")
@@ -980,7 +976,7 @@ class TestRBAC:
     """RBAC — require_permission dependency."""
 
     def test_has_permission_returns_true_for_granted_permission(self) -> None:
-        from unittest.mock import MagicMock  # noqa: PLC0415
+        from unittest.mock import MagicMock
 
         perm = MagicMock()
         perm.key = "chat:write"
@@ -999,11 +995,11 @@ class TestRBAC:
 
     async def test_require_permission_raises_403_for_missing_permission(self) -> None:
         """require_permission raises HTTPException 403 when user lacks the key."""
-        from unittest.mock import MagicMock  # noqa: PLC0415
+        from unittest.mock import MagicMock
 
-        from fastapi import HTTPException  # noqa: PLC0415
+        from fastapi import HTTPException
 
-        from fastapi_bootstrap.domains.auth.security import require_permission  # noqa: PLC0415
+        from fastapi_bootstrap.domains.auth.security import require_permission
 
         user = MagicMock()
         user.id = "test-user-id"
@@ -1018,9 +1014,9 @@ class TestRBAC:
         assert "chat:write" in exc_info.value.detail
 
     async def test_require_permission_returns_user_when_granted(self) -> None:
-        from unittest.mock import MagicMock  # noqa: PLC0415
+        from unittest.mock import MagicMock
 
-        from fastapi_bootstrap.domains.auth.security import require_permission  # noqa: PLC0415
+        from fastapi_bootstrap.domains.auth.security import require_permission
 
         user = MagicMock()
         user.id = "test-user-id"
@@ -1048,7 +1044,7 @@ class TestSecurityUtilities:
         assert not verify_password("WrongPass!", hashed)
 
     def test_create_access_token_decodes_correctly(self) -> None:
-        import uuid  # noqa: PLC0415
+        import uuid
 
         user_id = str(uuid.uuid4())
         token = create_access_token(user_id)

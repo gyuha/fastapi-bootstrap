@@ -40,10 +40,10 @@ from fastapi_bootstrap.core.config import settings
 logger = structlog.get_logger(__name__)
 
 # Module-level singleton — lazily initialised on first ``get_redis_client`` call
-_redis_client: Redis | None = None  # type: ignore[type-arg]
+_redis_client: Redis | None = None
 
 
-async def get_redis_client() -> Redis:  # type: ignore[type-arg]
+async def get_redis_client() -> Redis:
     """Return (or create) the shared async Redis client.
 
     Creates the connection pool on first call.  Subsequent calls return the
@@ -55,7 +55,7 @@ async def get_redis_client() -> Redis:  # type: ignore[type-arg]
     redis.asyncio.Redis
         A shared client instance backed by a connection pool.
     """
-    global _redis_client  # noqa: PLW0603
+    global _redis_client
 
     if _redis_client is None:
         try:
@@ -79,7 +79,7 @@ async def close_redis_client() -> None:
     Called during application shutdown (see ``lifespan`` in ``main.py``).
     Safe to call even if the client was never initialised.
     """
-    global _redis_client  # noqa: PLW0603
+    global _redis_client
 
     if _redis_client is not None:
         await _redis_client.aclose()
@@ -92,7 +92,7 @@ async def close_redis_client() -> None:
 # ---------------------------------------------------------------------------
 
 
-async def get_redis_dep() -> Redis:  # type: ignore[type-arg]
+async def get_redis_dep() -> Redis:
     """FastAPI dependency that yields the shared Redis client.
 
     Usage::

@@ -32,13 +32,10 @@ from sqlalchemy import (
     Column,
     DateTime,
     ForeignKey,
-    Integer,
     String,
     Table,
     Text,
-
     UniqueConstraint,
-
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -53,15 +50,26 @@ from fastapi_bootstrap.core.database import Base
 role_permissions: Table = Table(
     "role_permissions",
     Base.metadata,
-    Column("role_id", UUID(as_uuid=True), ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
-    Column("permission_id", UUID(as_uuid=True), ForeignKey("permissions.id", ondelete="CASCADE"), primary_key=True),
+    Column(
+        "role_id", UUID(as_uuid=True), ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True
+    ),
+    Column(
+        "permission_id",
+        UUID(as_uuid=True),
+        ForeignKey("permissions.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
 )
 
 user_roles: Table = Table(
     "user_roles",
     Base.metadata,
-    Column("user_id", UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True),
-    Column("role_id", UUID(as_uuid=True), ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True),
+    Column(
+        "user_id", UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    ),
+    Column(
+        "role_id", UUID(as_uuid=True), ForeignKey("roles.id", ondelete="CASCADE"), primary_key=True
+    ),
 )
 
 
@@ -75,9 +83,7 @@ class Permission(Base):
 
     __tablename__ = "permissions"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     key: Mapped[str] = mapped_column(String(128), unique=True, nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -85,7 +91,7 @@ class Permission(Base):
     )
 
     # relationships
-    roles: Mapped[list["Role"]] = relationship(
+    roles: Mapped[list[Role]] = relationship(
         "Role", secondary=role_permissions, back_populates="permissions"
     )
 
@@ -103,9 +109,7 @@ class Role(Base):
 
     __tablename__ = "roles"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -113,12 +117,10 @@ class Role(Base):
     )
 
     # relationships
-    permissions: Mapped[list["Permission"]] = relationship(
+    permissions: Mapped[list[Permission]] = relationship(
         "Permission", secondary=role_permissions, back_populates="roles"
     )
-    users: Mapped[list["User"]] = relationship(
-        "User", secondary=user_roles, back_populates="roles"
-    )
+    users: Mapped[list[User]] = relationship("User", secondary=user_roles, back_populates="roles")
 
     def __repr__(self) -> str:
         return f"<Role name={self.name!r}>"
@@ -144,12 +146,8 @@ class User(Base):
 
     __tablename__ = "users"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
-    email: Mapped[str] = mapped_column(
-        String(255), unique=True, nullable=False, index=True
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     display_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
     hashed_password: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -165,23 +163,22 @@ class User(Base):
     )
 
     # relationships
-    roles: Mapped[list["Role"]] = relationship(
+    roles: Mapped[list[Role]] = relationship(
         "Role", secondary=user_roles, back_populates="users", lazy="selectin"
     )
-    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
+    refresh_tokens: Mapped[list[RefreshToken]] = relationship(
         "RefreshToken", back_populates="user", cascade="all, delete-orphan"
     )
-    email_verifications: Mapped[list["EmailVerification"]] = relationship(
+    email_verifications: Mapped[list[EmailVerification]] = relationship(
         "EmailVerification", back_populates="user", cascade="all, delete-orphan"
     )
-    password_resets: Mapped[list["PasswordReset"]] = relationship(
+    password_resets: Mapped[list[PasswordReset]] = relationship(
         "PasswordReset", back_populates="user", cascade="all, delete-orphan"
     )
 
-    oauth_accounts: Mapped[list["OAuthAccount"]] = relationship(
+    oauth_accounts: Mapped[list[OAuthAccount]] = relationship(
         "OAuthAccount", back_populates="user", cascade="all, delete-orphan"
     )
-
 
     def has_permission(self, key: str) -> bool:
         """Return True if any of the user's roles grant *key*."""
@@ -217,9 +214,7 @@ class RefreshToken(Base):
 
     __tablename__ = "refresh_tokens"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -237,7 +232,7 @@ class RefreshToken(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
-    user: Mapped["User"] = relationship("User", back_populates="refresh_tokens")
+    user: Mapped[User] = relationship("User", back_populates="refresh_tokens")
 
     def __repr__(self) -> str:
         return f"<RefreshToken jti={self.jti!r} revoked={self.revoked}>"
@@ -257,9 +252,7 @@ class EmailVerification(Base):
 
     __tablename__ = "email_verifications"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -270,7 +263,7 @@ class EmailVerification(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
-    user: Mapped["User"] = relationship("User", back_populates="email_verifications")
+    user: Mapped[User] = relationship("User", back_populates="email_verifications")
 
     def __repr__(self) -> str:
         return f"<EmailVerification user_id={self.user_id!r} used={self.used}>"
@@ -289,9 +282,7 @@ class PasswordReset(Base):
 
     __tablename__ = "password_resets"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -302,11 +293,10 @@ class PasswordReset(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
-    user: Mapped["User"] = relationship("User", back_populates="password_resets")
+    user: Mapped[User] = relationship("User", back_populates="password_resets")
 
     def __repr__(self) -> str:
         return f"<PasswordReset user_id={self.user_id!r} used={self.used}>"
-
 
 
 # ---------------------------------------------------------------------------
@@ -326,13 +316,13 @@ class OAuthAccount(Base):
         UniqueConstraint("provider", "provider_user_id", name="uq_oauth_provider_uid"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    provider: Mapped[str] = mapped_column(String(32), nullable=False)  # "google" | "kakao" | "naver"
+    provider: Mapped[str] = mapped_column(
+        String(32), nullable=False
+    )  # "google" | "kakao" | "naver"
     provider_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
     access_token: Mapped[str | None] = mapped_column(Text, nullable=True)
     refresh_token: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -347,8 +337,7 @@ class OAuthAccount(Base):
         nullable=False,
     )
 
-    user: Mapped["User"] = relationship("User", back_populates="oauth_accounts")
+    user: Mapped[User] = relationship("User", back_populates="oauth_accounts")
 
     def __repr__(self) -> str:
         return f"<OAuthAccount provider={self.provider!r} uid={self.provider_user_id!r}>"
-

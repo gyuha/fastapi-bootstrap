@@ -34,7 +34,7 @@ def test_refresh_request_rejects_blank_refresh_token(refresh_token: str) -> None
 def test_refresh_request_preserves_non_blank_refresh_token() -> None:
     request = RefreshRequest.model_validate({"refresh_token": "refresh.jwt"})
 
-    assert request.refresh_token == "refresh.jwt"  # noqa: S105 - test JWT fixture value, not a secret.
+    assert request.refresh_token == "refresh.jwt"
 
 
 def test_token_response_contract_returns_bearer_jwt_pair_with_access_ttl_seconds() -> None:
@@ -47,9 +47,9 @@ def test_token_response_contract_returns_bearer_jwt_pair_with_access_ttl_seconds
         }
     )
 
-    assert response.access_token == "access.jwt"  # noqa: S105 - test JWT fixture value, not a secret.
-    assert response.refresh_token == "refresh.jwt"  # noqa: S105 - test JWT fixture value, not a secret.
-    assert response.token_type == "bearer"  # noqa: S105 - JWT token type constant, not a secret.
+    assert response.access_token == "access.jwt"
+    assert response.refresh_token == "refresh.jwt"
+    assert response.token_type == "bearer"
     assert response.expires_in == 900
 
 

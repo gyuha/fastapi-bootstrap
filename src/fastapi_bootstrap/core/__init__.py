@@ -6,18 +6,12 @@ Public re-exports for convenience::
     from fastapi_bootstrap.core import get_settings
 """
 
-from fastapi_bootstrap.core.config import Settings, get_settings, settings
-
-
-from fastapi_bootstrap.core.config import LLMProvider, LLMSettings
-
+from fastapi_bootstrap.core.config import LLMProvider, LLMSettings, Settings, get_settings, settings
 
 __all__ = [
+    "LLMProvider",
+    "LLMSettings",
     "Settings",
     "get_settings",
     "settings",
-
-    "LLMProvider",
-    "LLMSettings",
-
 ]

@@ -209,13 +209,11 @@ class PasswordResetConfirmResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-
 class OAuthLoginURLResponse(BaseModel):
     """Response body for GET /auth/oauth/{provider}/login."""
 
     authorization_url: str
     state: str
-
 
 
 # ---------------------------------------------------------------------------

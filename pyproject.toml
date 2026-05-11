@@ -156,14 +156,17 @@ select = [
 ignore = [
     "ANN101", # missing type annotation for self
     "ANN102", # missing type annotation for cls
+    "ANN401", # dynamic kwargs are used at framework/LLM boundaries
     "S101",   # use of assert (allowed in tests)
     "B008",   # do not perform function calls in defaults (FastAPI DI pattern)
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "ANN", "T20"]
-"alembic/**" = ["ANN", "N999"]
-"scripts/**" = ["T20", "ANN"]
+"tests/**" = ["S101", "ANN", "T20", "S104", "S105", "S106", "B017", "PT011", "N806", "RUF059", "RUF043", "PT018", "E501"]
+"alembic/**" = ["ANN", "N999", "E501"]
+"scripts/**" = ["T20", "ANN", "S310", "S104", "S603", "S607", "UP036", "E501", "N806"]
+"src/fastapi_bootstrap/core/config.py" = ["S104"]
+"src/fastapi_bootstrap/domains/auth/oauth/*.py" = ["S105"]
 
 [tool.ruff.format]
 quote-style = "double"

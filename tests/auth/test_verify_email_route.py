@@ -11,7 +11,7 @@ from fastapi_bootstrap.domains.auth.router import _get_service, router
 from fastapi_bootstrap.domains.auth.service import AuthService
 
 _EMAIL = "verify-route@example.com"
-_PASSWORD = "Password1!"  # noqa: S105 - test fixture credential
+_PASSWORD = "Password1!"
 
 
 def _build_app(service: AuthService) -> FastAPI:

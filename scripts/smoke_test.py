@@ -39,6 +39,7 @@
     1 — 테스트 실패 (오류 내용 출력 후 종료)
     2 — 서버 미응답 (연결 거부)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -58,11 +59,7 @@ if sys.version_info < (3, 12):
     sys.exit(1)
 
 # ── ANSI 색상 ────────────────────────────────────────────────────────────────
-_USE_COLOR = (
-    sys.platform != "win32"
-    and hasattr(sys.stdout, "fileno")
-    and sys.stdout.isatty()
-)
+_USE_COLOR = sys.platform != "win32" and hasattr(sys.stdout, "fileno") and sys.stdout.isatty()
 
 
 def _c(text: str, code: str) -> str:
@@ -93,6 +90,7 @@ def _die(msg: str, *, hint: str = "") -> None:
 
 
 # ── HTTP 헬퍼 ────────────────────────────────────────────────────────────────
+
 
 def _build_request(
     url: str,
@@ -158,7 +156,9 @@ def http_get(
     timeout: int = 10,
     allow_error: bool = False,
 ) -> tuple[int, dict[str, Any] | str]:
-    return http_request(url, method="GET", headers=headers, timeout=timeout, allow_error=allow_error)
+    return http_request(
+        url, method="GET", headers=headers, timeout=timeout, allow_error=allow_error
+    )
 
 
 def http_post(
@@ -169,7 +169,9 @@ def http_post(
     timeout: int = 10,
     allow_error: bool = False,
 ) -> tuple[int, dict[str, Any] | str]:
-    return http_request(url, method="POST", body=body, headers=headers, timeout=timeout, allow_error=allow_error)
+    return http_request(
+        url, method="POST", body=body, headers=headers, timeout=timeout, allow_error=allow_error
+    )
 
 
 def bearer_headers(token: str) -> dict[str, str]:
@@ -177,6 +179,7 @@ def bearer_headers(token: str) -> dict[str, str]:
 
 
 # ── SSE 스트리밍 헬퍼 ─────────────────────────────────────────────────────────
+
 
 def read_sse_chunks(
     url: str,
@@ -238,6 +241,7 @@ def read_sse_chunks(
 
 # ── Mailpit API 헬퍼 ─────────────────────────────────────────────────────────
 
+
 def mailpit_wait_for_email(
     mailpit_url: str,
     to_address: str,
@@ -269,10 +273,7 @@ def mailpit_wait_for_email(
             # 수신자 주소로 필터링
             for msg in messages:
                 to_list: list[dict[str, str]] = msg.get("To", [])
-                if any(
-                    to_address.lower() in t.get("Address", "").lower()
-                    for t in to_list
-                ):
+                if any(to_address.lower() in t.get("Address", "").lower() for t in to_list):
                     return msg
 
         time.sleep(poll_interval)
@@ -331,11 +332,12 @@ def extract_verification_token(body: str, base_url: str) -> str:
     _die(
         "이메일 본문에서 인증 토큰을 찾을 수 없습니다.",
         hint="이메일 본문을 확인하세요. 인증 URL 형식이 다를 수 있습니다.\n"
-             "       --skip-email-verify 플래그로 이 단계를 건너뛸 수 있습니다.",
+        "       --skip-email-verify 플래그로 이 단계를 건너뛸 수 있습니다.",
     )
 
 
 # ── 테스트 단계들 ─────────────────────────────────────────────────────────────
+
 
 @dataclass
 class SmokeTestConfig:
@@ -349,6 +351,7 @@ class SmokeTestConfig:
 @dataclass
 class TestState:
     """테스트 단계들 사이에서 공유되는 상태."""
+
     email: str = ""
     password: str = ""
     access_token: str = ""
@@ -388,7 +391,7 @@ def step_health_check(cfg: SmokeTestConfig) -> None:
         _die(
             f"레디니스 체크 실패: HTTP {status}",
             hint=f"응답: {str(data)[:300]}\n"
-                 "       postgres/redis/mailpit 컨테이너가 healthy인지 확인: make infra-health",
+            "       postgres/redis/mailpit 컨테이너가 healthy인지 확인: make infra-health",
         )
 
     if not isinstance(data, dict):
@@ -403,8 +406,8 @@ def step_health_check(cfg: SmokeTestConfig) -> None:
         _die(
             "로컬 인프라 연결 검증에 실패했습니다.",
             hint=f"실제 응답: {json.dumps(data, ensure_ascii=False)}\n"
-                 "       FastAPI 서버는 host에서 실행되어야 하며, docker-compose의 "
-                 "postgres/redis/mailpit 포트가 localhost로 노출되어야 합니다.",
+            "       FastAPI 서버는 host에서 실행되어야 하며, docker-compose의 "
+            "postgres/redis/mailpit 포트가 localhost로 노출되어야 합니다.",
         )
 
     _ok("PostgreSQL / Redis / Mailpit 연결 검증 통과")
@@ -517,9 +520,7 @@ def step_login(cfg: SmokeTestConfig, state: TestState) -> None:
         )
 
     # access_token 추출
-    state.access_token = str(
-        data.get("access_token", data.get("accessToken", ""))
-    )
+    state.access_token = str(data.get("access_token", data.get("accessToken", "")))
     if not state.access_token:
         _die(
             "로그인 응답에 access_token이 없습니다.",
@@ -527,9 +528,7 @@ def step_login(cfg: SmokeTestConfig, state: TestState) -> None:
         )
 
     # refresh_token 추출
-    state.refresh_token = str(
-        data.get("refresh_token", data.get("refreshToken", ""))
-    )
+    state.refresh_token = str(data.get("refresh_token", data.get("refreshToken", "")))
     if not state.refresh_token:
         _die(
             "로그인 응답에 refresh_token이 없습니다.",
@@ -662,7 +661,7 @@ def step_post_logout_blocked(cfg: SmokeTestConfig, state: TestState) -> None:
         _die(
             f"로그아웃 후 보호된 엔드포인트가 {status}를 반환했습니다. 401 또는 403이 기대됩니다.",
             hint=f"응답: {str(data)[:300]}\n"
-                 "       JWT blacklist가 올바르게 작동하지 않을 수 있습니다.",
+            "       JWT blacklist가 올바르게 작동하지 않을 수 있습니다.",
         )
 
     _ok(f"로그아웃 후 접근 차단 확인 (HTTP {status})")
@@ -729,7 +728,7 @@ def step_chat_streaming(cfg: SmokeTestConfig, state: TestState) -> None:
         _die(
             "SSE 스트리밍 응답에서 data 청크를 받지 못했습니다.",
             hint="LLM API 키 설정을 확인하세요 (.env 파일의 OPENAI_API_KEY 등).\n"
-                 "       또는 --skip-chat 플래그로 이 단계를 건너뛸 수 있습니다.",
+            "       또는 --skip-chat 플래그로 이 단계를 건너뛸 수 있습니다.",
         )
 
     _ok(f"SSE 스트리밍 성공 ({len(chunks)}개 청크 수신)")
@@ -739,6 +738,7 @@ def step_chat_streaming(cfg: SmokeTestConfig, state: TestState) -> None:
 
 
 # ── 메인 ─────────────────────────────────────────────────────────────────────
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
@@ -807,7 +807,7 @@ def main() -> None:
     W = 56
     sep = "═" * W
     print(f"\n{_c(sep, '1;36')}")
-    print(_c(f"  FastAPI Bootstrap — API 스모크 테스트", "1;32"))
+    print(_c("  FastAPI Bootstrap — API 스모크 테스트", "1;32"))
     print(_c(sep, "1;36"))
     print(f"  서버        : {_c(base_url, '36')}")
     print(f"  Mailpit     : {_c(mailpit_url, '36')}")
@@ -848,7 +848,6 @@ def main() -> None:
     else:
         _section("단계 9-10 — 채팅 도메인 (건너뜀)")
         _info("--skip-chat 플래그로 건너뜁니다.")
-
 
     # ── 최종 요약 ────────────────────────────────────────────────────────────
     print(f"\n{_c(sep, '1;36')}")

@@ -15,27 +15,25 @@ Usage::
 
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from functools import lru_cache
 from typing import Any
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 # ---------------------------------------------------------------------------
 # Enums
 # ---------------------------------------------------------------------------
 
 
-class AppEnv(str, Enum):
+class AppEnv(StrEnum):
     development = "development"
     staging = "staging"
     production = "production"
 
 
-
-class LLMProvider(str, Enum):
+class LLMProvider(StrEnum):
     """Supported LLM providers.
 
     The value is used as the litellm provider prefix, e.g. ``openai/gpt-4o``.
@@ -57,11 +55,9 @@ class LLMProvider(str, Enum):
     ollama = "ollama"
 
 
-
-class LogFormat(str, Enum):
+class LogFormat(StrEnum):
     json = "json"
     console = "console"
-
 
 
 # ---------------------------------------------------------------------------
@@ -262,8 +258,6 @@ class LLMSettings(BaseSettings):
         return kwargs
 
 
-
-
 # ---------------------------------------------------------------------------
 # Root Settings
 # ---------------------------------------------------------------------------
@@ -335,7 +329,6 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 15
     jwt_refresh_token_expire_days: int = 7
 
-
     # ── OAuth ─────────────────────────────────────────────────────────────────
     google_client_id: str = ""
     google_client_secret: SecretStr = SecretStr("")
@@ -349,7 +342,6 @@ class Settings(BaseSettings):
     naver_client_secret: SecretStr = SecretStr("")
     naver_redirect_uri: str = ""
 
-
     # ── Email ─────────────────────────────────────────────────────────────────
     mail_server: str = "localhost"
     mail_port: int = 1025
@@ -359,7 +351,6 @@ class Settings(BaseSettings):
     mail_from_name: str = "FastAPI Bootstrap"
     mail_starttls: bool = False
     mail_ssl_tls: bool = False
-
 
     # ── LLM / Chat domain ─────────────────────────────────────────────────────
     # env: LLM_PROVIDER  Supported: openai | anthropic | gemini | azure | ollama
@@ -399,7 +390,6 @@ class Settings(BaseSettings):
             )
         return v
 
-
     # ── Frontend ──────────────────────────────────────────────────────────────
     frontend_url: str = "http://localhost:3000"
     frontend_reset_confirm_url_base: str = "http://localhost:3000/auth/reset-confirm"
@@ -431,7 +421,7 @@ class Settings(BaseSettings):
         - JSON array: ``["http://localhost:3000","http://localhost:8000"]``
         - Comma-separated: ``http://localhost:3000,http://localhost:8000``
         """
-        import json as _json  # noqa: PLC0415
+        import json as _json
 
         v = self.cors_origins.strip()
         if v.startswith("["):
@@ -531,7 +521,6 @@ class Settings(BaseSettings):
             "VALIDATE_CERTS": self.mail_ssl_tls or self.mail_starttls,
         }
 
-
     @property
     def llm(self) -> LLMSettings:
         """Return a fully-populated :class:`LLMSettings` for the chat domain.
@@ -561,7 +550,6 @@ class Settings(BaseSettings):
             AZURE_OPENAI_API_VERSION=self.azure_openai_api_version,
             OLLAMA_BASE_URL=self.ollama_base_url,
         )
-
 
     def is_production(self) -> bool:
         """Return True if running in production environment."""

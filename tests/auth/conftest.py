@@ -55,7 +55,7 @@ class FakeRedis:
         self.expirations.clear()
 
 
-@pytest.fixture()
+@pytest.fixture
 def fake_redis() -> FakeRedis:
     return FakeRedis()
 
@@ -73,7 +73,7 @@ class FakeAuthRepository:
     """
 
     def __init__(self) -> None:
-        self.users: dict[str, Any] = {}        # email → user-like object
+        self.users: dict[str, Any] = {}  # email → user-like object
         self.users_by_id: dict[str, Any] = {}  # str(id) → user-like object
         self.refresh_tokens: dict[str, Any] = {}  # jti → token row
         self.email_verifications: dict[str, Any] = {}  # token_hash → ev row
@@ -105,7 +105,7 @@ class FakeAuthRepository:
         hashed_password: str | None = None,
         display_name: str | None = None,
     ) -> Any:
-        import uuid  # noqa: PLC0415
+        import uuid
 
         user = MagicMock()
         user.id = uuid.uuid4()
@@ -146,7 +146,7 @@ class FakeAuthRepository:
         family_id: str,
         expires_at: datetime,
     ) -> Any:
-        from fastapi_bootstrap.domains.auth.security import hash_token  # noqa: PLC0415
+        from fastapi_bootstrap.domains.auth.security import hash_token
 
         row = MagicMock()
         row.id = jti  # use jti as id for simplicity
@@ -215,9 +215,9 @@ class FakeAuthRepository:
         raw_token: str,
         expires_at: datetime,
     ) -> Any:
-        import uuid  # noqa: PLC0415
+        import uuid
 
-        from fastapi_bootstrap.domains.auth.security import hash_token  # noqa: PLC0415
+        from fastapi_bootstrap.domains.auth.security import hash_token
 
         row = MagicMock()
         row.id = uuid.uuid4()
@@ -230,7 +230,7 @@ class FakeAuthRepository:
         return row
 
     async def get_email_verification_by_token(self, raw_token: str) -> Any | None:
-        from fastapi_bootstrap.domains.auth.security import hash_token  # noqa: PLC0415
+        from fastapi_bootstrap.domains.auth.security import hash_token
 
         h = hash_token(raw_token)
         return self.email_verifications.get(h)
@@ -251,9 +251,9 @@ class FakeAuthRepository:
         raw_token: str,
         expires_at: datetime,
     ) -> Any:
-        import uuid  # noqa: PLC0415
+        import uuid
 
-        from fastapi_bootstrap.domains.auth.security import hash_token  # noqa: PLC0415
+        from fastapi_bootstrap.domains.auth.security import hash_token
 
         row = MagicMock()
         row.id = uuid.uuid4()
@@ -265,7 +265,7 @@ class FakeAuthRepository:
         return row
 
     async def get_password_reset_by_token(self, raw_token: str) -> Any | None:
-        from fastapi_bootstrap.domains.auth.security import hash_token  # noqa: PLC0415
+        from fastapi_bootstrap.domains.auth.security import hash_token
 
         h = hash_token(raw_token)
         return self.password_resets.get(h)
@@ -287,7 +287,7 @@ class FakeAuthRepository:
         refresh_token: str | None = None,
         expires_at: datetime | None = None,
     ) -> Any:
-        import uuid  # noqa: PLC0415
+        import uuid
 
         row = MagicMock()
         row.id = uuid.uuid4()
@@ -314,7 +314,7 @@ class FakeAuthRepository:
                 row.expires_at = expires_at
 
 
-@pytest.fixture()
+@pytest.fixture
 def fake_repo() -> FakeAuthRepository:
     return FakeAuthRepository()
 
@@ -324,9 +324,9 @@ def fake_repo() -> FakeAuthRepository:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def auth_service(fake_repo: FakeAuthRepository, fake_redis: FakeRedis) -> Any:
     """Return an :class:`AuthService` wired to in-memory fakes."""
-    from fastapi_bootstrap.domains.auth.service import AuthService  # noqa: PLC0415
+    from fastapi_bootstrap.domains.auth.service import AuthService
 
     return AuthService(repo=fake_repo, redis=fake_redis)

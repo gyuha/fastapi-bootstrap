@@ -160,9 +160,7 @@ class TestMakefileHotReload:
     def test_serve_target_has_reload_dir(self) -> None:
         """'make serve' must scope file-watching to the source tree."""
         block = _extract_target_block("serve")
-        assert "--reload-dir" in block, (
-            "Makefile 'serve' target must include '--reload-dir'."
-        )
+        assert "--reload-dir" in block, "Makefile 'serve' target must include '--reload-dir'."
 
     def test_dev_target_uses_uv_run(self) -> None:
         """uvicorn must be invoked through 'uv run' to use the project venv."""
@@ -274,14 +272,10 @@ class TestDockerComposeInfraOnly:
         )
 
     def test_redis_service_defined(self) -> None:
-        assert "redis:" in _compose_text(), (
-            "docker-compose.yml must define a 'redis' service."
-        )
+        assert "redis:" in _compose_text(), "docker-compose.yml must define a 'redis' service."
 
     def test_mailpit_service_defined(self) -> None:
-        assert "mailpit:" in _compose_text(), (
-            "docker-compose.yml must define a 'mailpit' service."
-        )
+        assert "mailpit:" in _compose_text(), "docker-compose.yml must define a 'mailpit' service."
 
     def test_no_app_service_defined(self) -> None:
         """Compose file must not define a service that runs the FastAPI app."""
@@ -352,9 +346,7 @@ class TestDockerComposeInfraOnly:
     def test_redis_has_healthcheck(self) -> None:
         """Redis must have a healthcheck for the same readiness reason."""
         redis_section = _extract_compose_service("redis")
-        assert "healthcheck" in redis_section, (
-            "The redis service must define a healthcheck."
-        )
+        assert "healthcheck" in redis_section, "The redis service must define a healthcheck."
         assert "redis-cli" in redis_section and "ping" in redis_section, (
             "The redis healthcheck must use redis-cli ping to verify readiness."
         )
@@ -391,17 +383,12 @@ class TestMainEntryPoint:
     def test_create_app_factory_exists(self) -> None:
         """A create_app() factory function must build and return the FastAPI instance."""
         source = _main_text()
-        assert "def create_app()" in source, (
-            "main.py must define a create_app() factory function."
-        )
+        assert "def create_app()" in source, "main.py must define a create_app() factory function."
 
     def test_main_block_exists(self) -> None:
         """main.py must have an if __name__ == '__main__' block."""
         source = _main_text()
-        has_main = (
-            '__name__ == "__main__"' in source
-            or "__name__ == '__main__'" in source
-        )
+        has_main = '__name__ == "__main__"' in source or "__name__ == '__main__'" in source
         assert has_main, (
             "main.py must have an 'if __name__ == \"__main__\":' block so the "
             "app can be run directly via 'python -m <package>'."
@@ -549,10 +536,7 @@ class TestMainModuleEntryPoint:
     def test_main_module_has_main_guard(self) -> None:
         """__main__.py must guard uvicorn.run() with if __name__ == '__main__'."""
         source = _main_module_text()
-        has_main = (
-            '__name__ == "__main__"' in source
-            or "__name__ == '__main__'" in source
-        )
+        has_main = '__name__ == "__main__"' in source or "__name__ == '__main__'" in source
         assert has_main, (
             "__main__.py must guard execution with 'if __name__ == \"__main__\":' "
             "so that merely importing the module doesn't launch uvicorn."

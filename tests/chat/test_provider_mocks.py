@@ -81,7 +81,6 @@ from ._mocks import (
     FakeStreamingChatLiteLLM,
 )
 
-
 # ---------------------------------------------------------------------------
 # FakeChatLiteLLM — unit tests for the mock class itself
 # ---------------------------------------------------------------------------
@@ -650,26 +649,20 @@ class TestStubLLMClient:
         assert isinstance(stub_llm_client, LLMClientProtocol)
 
     @pytest.mark.asyncio
-    async def test_ainvoke_returns_fake_response(
-        self, stub_llm_client: LLMClientProtocol
-    ) -> None:
+    async def test_ainvoke_returns_fake_response(self, stub_llm_client: LLMClientProtocol) -> None:
         result = await stub_llm_client.ainvoke([HumanMessage(content="hi")])
         assert isinstance(result, AIMessage)
         assert result.content == FAKE_RESPONSE_TEXT
 
     @pytest.mark.asyncio
-    async def test_astream_yields_fake_tokens(
-        self, stub_llm_client: LLMClientProtocol
-    ) -> None:
+    async def test_astream_yields_fake_tokens(self, stub_llm_client: LLMClientProtocol) -> None:
         chunks: list[str] = []
         async for chunk in stub_llm_client.astream([HumanMessage(content="hi")]):
             chunks.append(chunk)
         assert chunks == FAKE_STREAM_TOKENS
 
     @pytest.mark.asyncio
-    async def test_astream_yields_strings_only(
-        self, stub_llm_client: LLMClientProtocol
-    ) -> None:
+    async def test_astream_yields_strings_only(self, stub_llm_client: LLMClientProtocol) -> None:
         async for chunk in stub_llm_client.astream([HumanMessage(content="test")]):
             assert isinstance(chunk, str)
 
@@ -750,17 +743,13 @@ class TestChatServiceOpenAI:
     """Verify :func:`chat_service_openai` integrates correctly with fake OpenAI."""
 
     @pytest.mark.asyncio
-    async def test_complete_returns_fake_response(
-        self, chat_service_openai: ChatService
-    ) -> None:
+    async def test_complete_returns_fake_response(self, chat_service_openai: ChatService) -> None:
         result = await chat_service_openai.complete([HumanMessage(content="hello")])
         assert isinstance(result, AIMessage)
         assert result.content == FAKE_RESPONSE_TEXT
 
     @pytest.mark.asyncio
-    async def test_stream_yields_fake_tokens(
-        self, chat_service_openai: ChatService
-    ) -> None:
+    async def test_stream_yields_fake_tokens(self, chat_service_openai: ChatService) -> None:
         chunks: list[str] = []
         async for chunk in chat_service_openai.stream([HumanMessage(content="stream")]):
             chunks.append(chunk)
@@ -787,26 +776,20 @@ class TestChatServiceOllama:
     """Verify :func:`chat_service_ollama` integrates correctly with fake Ollama."""
 
     @pytest.mark.asyncio
-    async def test_complete_returns_fake_response(
-        self, chat_service_ollama: ChatService
-    ) -> None:
+    async def test_complete_returns_fake_response(self, chat_service_ollama: ChatService) -> None:
         result = await chat_service_ollama.complete([HumanMessage(content="hello")])
         assert isinstance(result, AIMessage)
         assert result.content == FAKE_RESPONSE_TEXT
 
     @pytest.mark.asyncio
-    async def test_stream_yields_fake_tokens(
-        self, chat_service_ollama: ChatService
-    ) -> None:
+    async def test_stream_yields_fake_tokens(self, chat_service_ollama: ChatService) -> None:
         chunks: list[str] = []
         async for chunk in chat_service_ollama.stream([HumanMessage(content="ollama")]):
             chunks.append(chunk)
         assert chunks == FAKE_STREAM_TOKENS
 
     @pytest.mark.asyncio
-    async def test_stream_count_matches_token_count(
-        self, chat_service_ollama: ChatService
-    ) -> None:
+    async def test_stream_count_matches_token_count(self, chat_service_ollama: ChatService) -> None:
         count = 0
         async for _ in chat_service_ollama.stream([HumanMessage(content="count")]):
             count += 1

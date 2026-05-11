@@ -58,7 +58,7 @@ class FakeAuthRepository:
 async def test_signup_hashes_password_with_argon2_before_persistence() -> None:
     repo = FakeAuthRepository()
     service = AuthService(repo, redis=None)  # type: ignore[arg-type]
-    raw_password = "Password1!"  # noqa: S105 - deterministic test credential
+    raw_password = "Password1!"
 
     await service.signup(
         email="alice@example.com",

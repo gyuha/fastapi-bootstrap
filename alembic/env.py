@@ -88,11 +88,11 @@ def _get_sync_db_url() -> str:
 
     # ── 2. Assembled from Settings (reads POSTGRES_* vars) ───────────────────
     try:
-        from fastapi_bootstrap.core.config import Settings  # noqa: PLC0415
+        from fastapi_bootstrap.core.config import Settings
 
         s = Settings(_env_file=None)  # type: ignore[call-arg]
         return s.sync_database_url
-    except Exception as exc:  # pragma: no cover  # noqa: BLE001
+    except Exception as exc:  # pragma: no cover
         logger.debug("Could not import Settings (%s) — falling back to env vars", exc)
 
     # ── 3. Fallback: convert async DATABASE_URL to sync ──────────────────────
@@ -124,21 +124,19 @@ config.set_main_option("sqlalchemy.url", _db_url)
 # The target_metadata is used by `alembic revision --autogenerate`.
 # Import models here to populate the metadata before Alembic inspects it.
 try:
-    from fastapi_bootstrap.core.database import Base  # noqa: PLC0415
+    from fastapi_bootstrap.core.database import Base
 
     # Import all domain models so Alembic autogenerate can detect them.
     # Add new model modules here when new domains are created.
     try:
-        from fastapi_bootstrap.domains.auth import models as _auth_models  # noqa: PLC0415, F401
+        from fastapi_bootstrap.domains.auth import models as _auth_models  # noqa: F401
     except ImportError:
         logger.debug("auth models not found — skipping")
 
-    
     try:
-        from fastapi_bootstrap.domains.chat import models as _chat_models  # noqa: PLC0415, F401
+        from fastapi_bootstrap.domains.chat import models as _chat_models  # noqa: F401
     except ImportError:
         logger.debug("chat models not found — skipping")
-    
 
     target_metadata = Base.metadata
 except ImportError:

@@ -40,7 +40,7 @@ async def test_create_password_reset_persists_hashed_token_user_expiry_and_unuse
     session = _CapturingSession()
     repo = AuthRepository(session)  # type: ignore[arg-type]
     user_id = uuid.uuid4()
-    raw_token = "raw-password-reset-token"  # noqa: S105 - token-shaped test fixture
+    raw_token = "raw-password-reset-token"
     expires_at = datetime.now(UTC) + timedelta(hours=1)
 
     row = await repo.create_password_reset(
@@ -62,7 +62,7 @@ async def test_create_password_reset_persists_hashed_token_user_expiry_and_unuse
 async def test_get_password_reset_by_token_queries_by_hashed_token_only() -> None:
     session = _CapturingSession()
     repo = AuthRepository(session)  # type: ignore[arg-type]
-    raw_token = "lookup-password-reset-token"  # noqa: S105 - token-shaped test fixture
+    raw_token = "lookup-password-reset-token"
 
     await repo.get_password_reset_by_token(raw_token)
 

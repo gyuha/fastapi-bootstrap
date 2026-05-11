@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
 
 import pytest
 
@@ -24,7 +23,6 @@ from fastapi_bootstrap.domains.shared.types import (
     PermissionKey,
     UserId,
 )
-
 
 # ---------------------------------------------------------------------------
 # Entity tests

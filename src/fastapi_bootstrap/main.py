@@ -70,7 +70,7 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     )
 
     # Warm Redis connection pool
-    from fastapi_bootstrap.core.redis import get_redis_client  # noqa: PLC0415
+    from fastapi_bootstrap.core.redis import get_redis_client
 
     _redis = await get_redis_client()
     await _await_if_needed(_redis.ping())
@@ -79,7 +79,7 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     # ── Shutdown ─────────────────────────────────────────────────────────────
-    from fastapi_bootstrap.core.redis import close_redis_client  # noqa: PLC0415
+    from fastapi_bootstrap.core.redis import close_redis_client
 
     await close_redis_client()
     logger.info("shutdown_complete", app="FastAPI Bootstrap")
@@ -107,7 +107,10 @@ def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     application = FastAPI(
         title="FastAPI Bootstrap",
-        description="Production-grade FastAPI backend with auth (JWT+OAuth+RBAC) and LLM chat proxy domains.",
+        description=(
+            "Production-grade FastAPI backend with auth (JWT+OAuth+RBAC) "
+            "and LLM chat proxy domains."
+        ),
         version="0.1.0",
         docs_url="/docs",
         redoc_url="/redoc",
@@ -144,7 +147,7 @@ def create_app() -> FastAPI:
 
 def _register_routers(application: FastAPI) -> None:
     """Register all domain routers and the health endpoint."""
-    from fastapi import APIRouter  # noqa: PLC0415
+    from fastapi import APIRouter
 
     # Health check (no auth required)
     health_router = APIRouter(tags=["health"])
@@ -209,7 +212,7 @@ def _register_routers(application: FastAPI) -> None:
             try:
                 await check()
                 checks[name] = "ok"
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 checks[name] = f"error: {exc}"
 
         all_ok = all(v == "ok" for v in checks.values())
@@ -221,23 +224,21 @@ def _register_routers(application: FastAPI) -> None:
 
     # Auth domain
     try:
-        from fastapi_bootstrap.domains.auth.router import router as auth_router  # noqa: PLC0415
+        from fastapi_bootstrap.domains.auth.router import router as auth_router
 
         application.include_router(auth_router, prefix="/api/v1")
         logger.debug("router_registered", prefix="/api/v1/auth")
     except ImportError:
         logger.debug("auth_router_not_found", note="Will be added in later phase")
 
-    
     # Chat domain
     try:
-        from fastapi_bootstrap.domains.chat.router import router as chat_router  # noqa: PLC0415
+        from fastapi_bootstrap.domains.chat.router import router as chat_router
 
         application.include_router(chat_router, prefix="/api/v1")
         logger.debug("router_registered", prefix="/api/v1/chat")
     except ImportError:
         logger.debug("chat_router_not_found", note="Will be added in later phase")
-    
 
 
 # ---------------------------------------------------------------------------
@@ -263,8 +264,9 @@ app: FastAPI = create_app()
 #       forces workers=1 when reload is enabled.
 
 if __name__ == "__main__":
-    import uvicorn  # noqa: PLC0415 — intentional late import for __main__ only
-    from pathlib import Path  # noqa: PLC0415
+    from pathlib import Path
+
+    import uvicorn
 
     _src_dir = Path(__file__).parent  # src/fastapi_bootstrap/
     _reload = settings.is_development()

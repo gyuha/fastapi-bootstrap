@@ -68,6 +68,7 @@ from langchain_core.messages.ai import AIMessage
 
 from fastapi_bootstrap.core.config import LLMSettings, get_settings
 from fastapi_bootstrap.domains.chat.llm_factory import ProviderFactory
+from fastapi_bootstrap.domains.chat.ports import AbstractLLMPort
 from fastapi_bootstrap.infra.llm.provider_factory import make_chat_litellm
 
 if TYPE_CHECKING:
@@ -81,7 +82,7 @@ logger = structlog.get_logger(__name__)
 # ---------------------------------------------------------------------------
 
 
-class LLMClient:
+class LLMClient(AbstractLLMPort):
     """Provider-agnostic async LLM client backed by langchain-litellm.
 
     This class is a thin, testable wrapper around :class:`ChatLiteLLM` that:
@@ -200,7 +201,7 @@ class LLMClient:
             model=self._model_string,
             content_length=len(str(result.content)),
         )
-        return result  # type: ignore[return-value]
+        return result
 
     async def astream(
         self,
@@ -363,22 +364,24 @@ def get_llm_client() -> LLMClient:
 
 
 class DefaultLLMClientFactory:
-    """Production implementation of :class:`~fastapi_bootstrap.domains.chat.ports.LLMClientFactoryProtocol`.
+    """Production implementation of the LLM client factory protocol.
 
     Reads :class:`~fastapi_bootstrap.core.config.LLMSettings` from the global
     :class:`~fastapi_bootstrap.core.config.Settings` singleton and constructs a
     fully configured :class:`LLMClient` via ``get_llm_client()``.
 
-    This class satisfies :class:`~fastapi_bootstrap.domains.chat.ports.LLMClientFactoryProtocol`
-    structurally (no explicit inheritance) — ``isinstance`` checks using
-    the ``@runtime_checkable`` protocol will pass.
+    This class satisfies ``LLMClientFactoryProtocol`` structurally, so
+    ``isinstance`` checks using the ``@runtime_checkable`` protocol will pass.
 
     Typical usage
     -------------
     *Production* — let FastAPI inject via ``Depends``::
 
         from fastapi import Depends
-        from fastapi_bootstrap.domains.chat.llm_client import DefaultLLMClientFactory, get_llm_client
+        from fastapi_bootstrap.domains.chat.llm_client import (
+            DefaultLLMClientFactory,
+            get_llm_client,
+        )
         from fastapi_bootstrap.domains.chat.ports import LLMClientFactoryProtocol
 
         def get_factory() -> LLMClientFactoryProtocol:

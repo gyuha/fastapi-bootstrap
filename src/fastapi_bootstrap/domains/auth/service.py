@@ -71,9 +71,8 @@ def _refresh_token_reuse_state(token_row: RefreshToken | None) -> str:
     """Classify the persisted state that made a refresh token a reuse event."""
     if token_row is None:
         return "missing"
-    if (
-        getattr(token_row, "rotated_at", None) is not None
-        or getattr(token_row, "replaced_by_jti", None)
+    if getattr(token_row, "rotated_at", None) is not None or getattr(
+        token_row, "replaced_by_jti", None
     ):
         return "rotated"
     return "revoked"
@@ -422,7 +421,6 @@ class AuthService:
 
         logger.info("password_reset_completed", user_id=str(pr.user_id))
 
-
     # ── OAuth provisioning ────────────────────────────────────────────────────
 
     async def oauth_provision_user(
@@ -474,7 +472,6 @@ class AuthService:
         )
         tokens = await self._issue_tokens(user)
         return user, tokens
-
 
     # ── Internal ──────────────────────────────────────────────────────────────
 

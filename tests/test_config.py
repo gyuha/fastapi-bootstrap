@@ -19,22 +19,18 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
 from unittest.mock import patch
 
 import pytest
 
 from fastapi_bootstrap.core.config import (
     AppEnv,
+    LLMProvider,
+    LLMSettings,
     LogFormat,
     Settings,
     get_settings,
-
-    LLMProvider,
-    LLMSettings,
-
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -110,9 +106,7 @@ class TestAppSettings:
     def test_frontend_reset_confirm_url_base_default(self) -> None:
         """Password-reset confirm links have an explicit frontend base URL setting."""
         s = make_settings()
-        assert s.frontend_reset_confirm_url_base == (
-            "http://localhost:3000/auth/reset-confirm"
-        )
+        assert s.frontend_reset_confirm_url_base == ("http://localhost:3000/auth/reset-confirm")
 
     def test_frontend_reset_confirm_url_base_env_override_is_normalized(self) -> None:
         """FRONTEND_RESET_CONFIRM_URL_BASE can point reset emails at a custom frontend route."""
@@ -228,7 +222,7 @@ class TestEmailSettings:
             MAIL_SERVER="smtp.sendgrid.net",
             MAIL_PORT="587",
             MAIL_USERNAME="apikey",
-            MAIL_PASSWORD="SG.test-api-key",  # noqa: S106
+            MAIL_PASSWORD="SG.test-api-key",
             MAIL_FROM="no-reply@example.com",
             MAIL_FROM_NAME="Example App",
             MAIL_STARTTLS="true",
@@ -263,7 +257,7 @@ class TestEmailSettings:
             MAIL_SERVER="smtp.example.com",
             MAIL_PORT="587",
             MAIL_USERNAME="user@example.com",
-            MAIL_PASSWORD="secret",  # noqa: S106
+            MAIL_PASSWORD="secret",
             MAIL_STARTTLS="true",
             MAIL_SSL_TLS="false",
         )
@@ -323,7 +317,7 @@ class TestContainerConnectivity:
         s = make_settings(
             POSTGRES_HOST="postgres",
             POSTGRES_USER="app",
-            POSTGRES_PASSWORD="app",  # noqa: S106
+            POSTGRES_PASSWORD="app",
             POSTGRES_PORT="5432",
             POSTGRES_DB="fastapi_bootstrap_db",
         )
@@ -342,9 +336,7 @@ class TestContainerConnectivity:
         This is how docker-compose overrides the URL for the ``app`` profile:
         it sets DATABASE_URL with the container hostname directly.
         """
-        container_url = (
-            "postgresql+asyncpg://app:app@postgres:5432/fastapi_bootstrap_db"
-        )
+        container_url = "postgresql+asyncpg://app:app@postgres:5432/fastapi_bootstrap_db"
         s = make_settings(
             DATABASE_URL=container_url,
             POSTGRES_HOST="localhost",  # would be wrong — but overridden by DATABASE_URL
@@ -362,9 +354,7 @@ class TestContainerConnectivity:
 
     def test_sync_database_url_for_alembic_container(self) -> None:
         """DATABASE_URL_SYNC produces a psycopg2 DSN for Alembic in container mode."""
-        container_sync_url = (
-            "postgresql+psycopg2://app:app@postgres:5432/fastapi_bootstrap_db"
-        )
+        container_sync_url = "postgresql+psycopg2://app:app@postgres:5432/fastapi_bootstrap_db"
         s = make_settings(DATABASE_URL_SYNC=container_sync_url)
         assert s.sync_database_url == container_sync_url
         assert "psycopg2" in s.sync_database_url
@@ -377,14 +367,8 @@ class TestContainerConnectivity:
     ) -> None:
         """Settings loads explicit local DSN/Redis/Mailpit values from a .env file."""
         env_file = tmp_path / ".env"
-        async_dsn = (
-            "postgresql+asyncpg://app:app@localhost:5432/"
-            "fastapi_bootstrap_db"
-        )
-        sync_dsn = (
-            "postgresql+psycopg2://app:app@localhost:5432/"
-            "fastapi_bootstrap_db"
-        )
+        async_dsn = "postgresql+asyncpg://app:app@localhost:5432/fastapi_bootstrap_db"
+        sync_dsn = "postgresql+psycopg2://app:app@localhost:5432/fastapi_bootstrap_db"
         env_file.write_text(
             "\n".join(
                 [
@@ -423,7 +407,6 @@ class TestContainerConnectivity:
         # Async DSN should contain localhost
         assert "localhost" in s.async_database_url
         assert "localhost" in s.redis_dsn
-
 
 
 # ---------------------------------------------------------------------------
@@ -656,7 +639,6 @@ class TestLLMSettingsViaRootSettings:
             assert s.llm.litellm_model.startswith(expected_prefix), (
                 f"Provider '{provider}' should produce model string starting with '{expected_prefix}'"
             )
-
 
 
 # ---------------------------------------------------------------------------

@@ -19,11 +19,8 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from fastapi_bootstrap.core.config import LLMProvider, LLMSettings
 from fastapi_bootstrap.infra.llm.provider_factory import make_chat_litellm
-
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -177,9 +174,7 @@ class TestOllamaProviderRouting:
         """model kwarg must be 'ollama/<model>'."""
         captured, fn = _capture_kwargs()
         with patch(_PROVIDER_FACTORY_PATH, side_effect=fn):
-            make_chat_litellm(
-                _make_settings("ollama", OLLAMA_TEST_MODEL, openai_api_key="")
-            )
+            make_chat_litellm(_make_settings("ollama", OLLAMA_TEST_MODEL, openai_api_key=""))
 
         assert captured["model"] == f"ollama/{OLLAMA_TEST_MODEL}"
 
@@ -416,7 +411,9 @@ class TestInfraLayerIsolation:
 
     def test_provider_factory_module_exports_make_chat_litellm(self) -> None:
         """make_chat_litellm must be importable from the infra module."""
-        from fastapi_bootstrap.infra.llm.provider_factory import make_chat_litellm as fn  # noqa: F401
+        from fastapi_bootstrap.infra.llm.provider_factory import (
+            make_chat_litellm as fn,
+        )
 
         assert callable(fn)
 

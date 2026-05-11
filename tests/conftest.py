@@ -19,7 +19,6 @@ import pytest
 
 from fastapi_bootstrap.core.config import get_settings
 
-
 # ---------------------------------------------------------------------------
 # Settings cache isolation
 # ---------------------------------------------------------------------------

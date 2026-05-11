@@ -11,6 +11,7 @@ Creates all tables for:
   - Chat domain: conversations, messages
 
 """
+
 from __future__ import annotations
 
 import sqlalchemy as sa
@@ -132,7 +133,9 @@ def upgrade() -> None:
     )
     op.create_index(op.f("ix_refresh_tokens_user_id"), "refresh_tokens", ["user_id"])
     op.create_index(op.f("ix_refresh_tokens_family_id"), "refresh_tokens", ["family_id"])
-    op.create_index(op.f("ix_refresh_tokens_replaced_by_jti"), "refresh_tokens", ["replaced_by_jti"])
+    op.create_index(
+        op.f("ix_refresh_tokens_replaced_by_jti"), "refresh_tokens", ["replaced_by_jti"]
+    )
 
     # ── email_verifications ───────────────────────────────────────────────────
     op.create_table(
@@ -152,7 +155,10 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
-        op.f("ix_email_verifications_token_hash"), "email_verifications", ["token_hash"], unique=True
+        op.f("ix_email_verifications_token_hash"),
+        "email_verifications",
+        ["token_hash"],
+        unique=True,
     )
     op.create_index(op.f("ix_email_verifications_user_id"), "email_verifications", ["user_id"])
 
@@ -206,7 +212,6 @@ def upgrade() -> None:
     )
     op.create_index(op.f("ix_oauth_accounts_user_id"), "oauth_accounts", ["user_id"])
 
-
     # ── conversations ─────────────────────────────────────────────────────────
     op.create_table(
         "conversations",
@@ -247,13 +252,10 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.ForeignKeyConstraint(
-            ["conversation_id"], ["conversations.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["conversation_id"], ["conversations.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_messages_conversation_id"), "messages", ["conversation_id"])
-
 
 
 def downgrade() -> None:

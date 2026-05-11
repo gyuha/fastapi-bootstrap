@@ -24,7 +24,6 @@ import pytest
 from fastapi_bootstrap.core.config import LLMProvider, LLMSettings
 from fastapi_bootstrap.domains.chat.llm_factory import ProviderFactory
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -333,11 +332,11 @@ class TestProviderSwitching:
     @pytest.mark.parametrize(
         ("provider", "model", "expected_prefix"),
         [
-            ("openai",    "gpt-4o",                       "openai/"),
-            ("anthropic", "claude-3-5-sonnet-20241022",   "anthropic/"),
-            ("gemini",    "gemini-1.5-pro",               "gemini/"),
-            ("ollama",    "llama3.2",                     "ollama/"),
-            ("azure",     "gpt-4o",                       "azure/"),
+            ("openai", "gpt-4o", "openai/"),
+            ("anthropic", "claude-3-5-sonnet-20241022", "anthropic/"),
+            ("gemini", "gemini-1.5-pro", "gemini/"),
+            ("ollama", "llama3.2", "ollama/"),
+            ("azure", "gpt-4o", "azure/"),
         ],
     )
     def test_provider_prefix_in_model_string(

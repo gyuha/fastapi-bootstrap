@@ -44,9 +44,12 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
 from fastapi_bootstrap.domains.chat.container import get_chat_service, get_llm_factory
-from fastapi_bootstrap.domains.chat.ports import AbstractLLMPort, LLMClientFactoryProtocol, LLMClientProtocol
+from fastapi_bootstrap.domains.chat.ports import (
+    AbstractLLMPort,
+    LLMClientFactoryProtocol,
+    LLMClientProtocol,
+)
 from fastapi_bootstrap.domains.chat.service import ChatService
-
 
 # ---------------------------------------------------------------------------
 # Stub implementations — zero concrete provider imports
@@ -153,14 +156,6 @@ class TestContainerModuleIsolation:
         """Only DI functions and interface types should be publicly accessible."""
         import fastapi_bootstrap.domains.chat.container as container_module
 
-        # Names that are explicitly permitted in the container namespace
-        allowed = {
-            "get_llm_factory",
-            "get_chat_service",
-            "LLMClientFactoryProtocol",
-            "ChatService",
-            "Depends",  # FastAPI DI marker — imported from fastapi
-        }
         # Concrete infrastructure names that must NOT be present
         forbidden = {
             "ChatLiteLLM",
@@ -225,9 +220,7 @@ class TestGetLlmFactory:
         assert hasattr(factory, "get_llm_client"), (
             "Factory from get_llm_factory() must have a 'get_llm_client' attribute"
         )
-        assert callable(factory.get_llm_client), (
-            "factory.get_llm_client must be callable"
-        )
+        assert callable(factory.get_llm_client), "factory.get_llm_client must be callable"
 
     def test_is_synchronous(self) -> None:
         """get_llm_factory must be synchronous (not a coroutine) for FastAPI Depends."""
@@ -308,9 +301,7 @@ class TestGetChatService:
         service = get_chat_service(factory=stub)
 
         # Service must have an _llm attribute (the injected client)
-        assert hasattr(service, "_llm"), (
-            "ChatService must store the injected LLM client as _llm"
-        )
+        assert hasattr(service, "_llm"), "ChatService must store the injected LLM client as _llm"
         # It must NOT hold the factory
         assert not isinstance(service._llm, LLMClientFactoryProtocol), (  # type: ignore[attr-defined]
             "ChatService._llm should be an LLMClientProtocol client, not a factory"
@@ -467,8 +458,7 @@ class TestProviderIsolationInDILayer:
         resolved = hints.get("llm_client")
 
         assert resolved is AbstractLLMPort, (
-            f"ChatService.__init__ 'llm_client' must be AbstractLLMPort, "
-            f"got {resolved!r}"
+            f"ChatService.__init__ 'llm_client' must be AbstractLLMPort, got {resolved!r}"
         )
 
     def test_full_di_path_requires_zero_concrete_imports(self) -> None:

@@ -39,7 +39,6 @@ from sqlalchemy.orm import DeclarativeBase
 
 from fastapi_bootstrap.core.config import settings
 
-
 # ---------------------------------------------------------------------------
 # Declarative base — all domain models extend this
 # ---------------------------------------------------------------------------
@@ -68,6 +67,7 @@ class Base(DeclarativeBase):
 # Async engine
 # ---------------------------------------------------------------------------
 
+
 def _build_engine() -> AsyncEngine:
     """Create the async SQLAlchemy engine from application settings.
 
@@ -78,10 +78,10 @@ def _build_engine() -> AsyncEngine:
     return create_async_engine(
         settings.async_database_url,
         echo=settings.app_debug,
-        pool_pre_ping=True,       # detect stale connections
+        pool_pre_ping=True,  # detect stale connections
         pool_size=5,
         max_overflow=10,
-        pool_recycle=3600,        # recycle connections after 1h
+        pool_recycle=3600,  # recycle connections after 1h
     )
 
 
@@ -95,7 +95,7 @@ engine: AsyncEngine = _build_engine()
 AsyncSessionFactory: async_sessionmaker[AsyncSession] = async_sessionmaker(
     engine,
     class_=AsyncSession,
-    expire_on_commit=False,    # avoid lazy-load errors after commit
+    expire_on_commit=False,  # avoid lazy-load errors after commit
     autoflush=False,
     autocommit=False,
 )

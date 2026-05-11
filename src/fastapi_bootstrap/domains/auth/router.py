@@ -35,8 +35,8 @@ from fastapi_bootstrap.domains.auth.repository import AuthRepository
 from fastapi_bootstrap.domains.auth.schemas import (
     LoginRequest,
     LogoutRequest,
-OAuthLoginURLResponse,
-PasswordResetConfirmRequest,
+    OAuthLoginURLResponse,
+    PasswordResetConfirmRequest,
     PasswordResetConfirmResponse,
     PasswordResetRequest,
     PasswordResetRequestResponse,
@@ -254,7 +254,6 @@ async def get_me(current_user: User = Depends(get_current_user)) -> UserResponse
     return UserResponse.model_validate(current_user)
 
 
-
 # ---------------------------------------------------------------------------
 # OAuth endpoints
 # ---------------------------------------------------------------------------
@@ -329,7 +328,6 @@ async def oauth_callback(
     adapter: Any = _get_oauth_adapter(provider, s)
 
     try:
-
         if provider == "naver":
             user_info = await adapter.exchange_code(code, state)
         else:
@@ -344,9 +342,11 @@ async def oauth_callback(
 
     try:
         from datetime import UTC, timedelta
+
         expires_at = None
         if user_info.get("expires_in"):
             from datetime import datetime
+
             expires_at = datetime.now(UTC) + timedelta(seconds=int(user_info["expires_in"]))
 
         _user, tokens = await service.oauth_provision_user(
@@ -382,21 +382,20 @@ def _get_oauth_adapter(provider: str, settings: Settings) -> object:
 
     if provider == "google":
         from fastapi_bootstrap.domains.auth.oauth.google import GoogleOAuthAdapter
-        return GoogleOAuthAdapter(settings)
 
+        return GoogleOAuthAdapter(settings)
 
     if provider == "kakao":
         from fastapi_bootstrap.domains.auth.oauth.kakao import KakaoOAuthAdapter
-        return KakaoOAuthAdapter(settings)
 
+        return KakaoOAuthAdapter(settings)
 
     if provider == "naver":
         from fastapi_bootstrap.domains.auth.oauth.naver import NaverOAuthAdapter
+
         return NaverOAuthAdapter(settings)
 
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail=f"Unsupported OAuth provider: '{provider}'. Configured: google,kakao,naver.",
     )
-
-

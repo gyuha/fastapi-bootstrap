@@ -91,9 +91,7 @@ class AuthRepository:
         return user
 
     async def mark_user_verified(self, user_id: uuid.UUID) -> None:
-        await self._session.execute(
-            update(User).where(User.id == user_id).values(is_verified=True)
-        )
+        await self._session.execute(update(User).where(User.id == user_id).values(is_verified=True))
 
     async def update_user_password(self, user_id: uuid.UUID, hashed_password: str) -> None:
         await self._session.execute(
@@ -103,9 +101,7 @@ class AuthRepository:
     # ── Roles ─────────────────────────────────────────────────────────────────
 
     async def get_role_by_name(self, name: str) -> Role | None:
-        result = await self._session.execute(
-            select(Role).where(Role.name == name)
-        )
+        result = await self._session.execute(select(Role).where(Role.name == name))
         return result.scalar_one_or_none()
 
     async def assign_role_to_user(self, user: User, role: Role) -> None:
@@ -135,17 +131,13 @@ class AuthRepository:
         return token
 
     async def get_refresh_token_by_jti(self, jti: str) -> RefreshToken | None:
-        result = await self._session.execute(
-            select(RefreshToken).where(RefreshToken.jti == jti)
-        )
+        result = await self._session.execute(select(RefreshToken).where(RefreshToken.jti == jti))
         return result.scalar_one_or_none()
 
     async def get_refresh_token_by_jti_for_update(self, jti: str) -> RefreshToken | None:
         """Return a refresh token row while holding a row-level write lock."""
         result = await self._session.execute(
-            select(RefreshToken)
-            .where(RefreshToken.jti == jti)
-            .with_for_update(of=RefreshToken)
+            select(RefreshToken).where(RefreshToken.jti == jti).with_for_update(of=RefreshToken)
         )
         return result.scalar_one_or_none()
 
@@ -202,9 +194,7 @@ class AuthRepository:
         await self.revoke_all_user_refresh_tokens(user_id)
 
     async def delete_refresh_token(self, jti: str) -> None:
-        await self._session.execute(
-            delete(RefreshToken).where(RefreshToken.jti == jti)
-        )
+        await self._session.execute(delete(RefreshToken).where(RefreshToken.jti == jti))
 
     # ── EmailVerification ─────────────────────────────────────────────────────
 
@@ -227,8 +217,7 @@ class AuthRepository:
 
     async def get_email_verification_by_token(self, raw_token: str) -> EmailVerification | None:
         result = await self._session.execute(
-            select(EmailVerification)
-            .where(EmailVerification.token_hash == hash_token(raw_token))
+            select(EmailVerification).where(EmailVerification.token_hash == hash_token(raw_token))
         )
         return result.scalar_one_or_none()
 
@@ -265,8 +254,7 @@ class AuthRepository:
 
     async def get_password_reset_by_token(self, raw_token: str) -> PasswordReset | None:
         result = await self._session.execute(
-            select(PasswordReset)
-            .where(PasswordReset.token_hash == hash_token(raw_token))
+            select(PasswordReset).where(PasswordReset.token_hash == hash_token(raw_token))
         )
         return result.scalar_one_or_none()
 
@@ -274,7 +262,6 @@ class AuthRepository:
         await self._session.execute(
             update(PasswordReset).where(PasswordReset.id == pr_id).values(used=True)
         )
-
 
     # ── OAuthAccount ─────────────────────────────────────────────────────────
 
@@ -284,8 +271,7 @@ class AuthRepository:
         provider_user_id: str,
     ) -> OAuthAccount | None:
         result = await self._session.execute(
-            select(OAuthAccount)
-            .where(
+            select(OAuthAccount).where(
                 OAuthAccount.provider == provider,
                 OAuthAccount.provider_user_id == provider_user_id,
             )
@@ -329,4 +315,3 @@ class AuthRepository:
                 expires_at=expires_at,
             )
         )
-

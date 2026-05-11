@@ -49,9 +49,10 @@ from __future__ import annotations
 import asyncio
 import uuid
 from collections import defaultdict
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any, Callable, Coroutine, Type
+from typing import Any
 
 import structlog
 
@@ -125,11 +126,11 @@ class DomainEventBus:
 
     def __init__(self) -> None:
         # { EventClass: [handler, handler, ...] }
-        self._handlers: dict[Type[DomainEvent], list[EventHandler]] = defaultdict(list)
+        self._handlers: dict[type[DomainEvent], list[EventHandler]] = defaultdict(list)
 
     def subscribe(
         self,
-        event_type: Type[DomainEvent],
+        event_type: type[DomainEvent],
         handler: EventHandler,
     ) -> None:
         """Register *handler* to receive events of *event_type*.
@@ -180,7 +181,7 @@ class DomainEventBus:
             return_exceptions=True,
         )
 
-        for handler, result in zip(handlers, results):
+        for handler, result in zip(handlers, results, strict=True):
             if isinstance(result, BaseException):
                 logger.error(
                     "domain_event_handler_error",
@@ -208,7 +209,7 @@ async def publish(event: DomainEvent) -> None:
     await event_bus.publish(event)
 
 
-def subscribe(event_type: Type[DomainEvent]) -> Callable[[EventHandler], EventHandler]:
+def subscribe(event_type: type[DomainEvent]) -> Callable[[EventHandler], EventHandler]:
     """Decorator — register the decorated function as an event handler.
 
     Usage::

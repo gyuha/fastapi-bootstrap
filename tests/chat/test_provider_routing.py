@@ -55,7 +55,6 @@ from fastapi_bootstrap.core.config import LLMProvider, LLMSettings, get_settings
 from fastapi_bootstrap.domains.chat.llm_client import LLMClient, get_llm_client
 from fastapi_bootstrap.domains.chat.llm_factory import ProviderFactory
 
-
 # ---------------------------------------------------------------------------
 # Constants — fake credentials / endpoints (never hit a real provider)
 # ---------------------------------------------------------------------------
@@ -136,9 +135,7 @@ class TestOpenAIProviderRouting:
 
     # ── Model string ─────────────────────────────────────────────────────────
 
-    def test_model_string_starts_with_openai_prefix(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_model_string_starts_with_openai_prefix(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """LLMSettings.litellm_model starts with 'openai/' when LLM_PROVIDER=openai."""
         monkeypatch.setenv("LLM_PROVIDER", "openai")
         monkeypatch.setenv("LLM_DEFAULT_MODEL", OPENAI_TEST_MODEL)
@@ -149,9 +146,7 @@ class TestOpenAIProviderRouting:
             f"Expected litellm_model to start with 'openai/', got {s.llm.litellm_model!r}"
         )
 
-    def test_model_string_contains_model_name(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_model_string_contains_model_name(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Model name is preserved verbatim after the 'openai/' prefix."""
         monkeypatch.setenv("LLM_PROVIDER", "openai")
         monkeypatch.setenv("LLM_DEFAULT_MODEL", OPENAI_TEST_MODEL)
@@ -263,9 +258,7 @@ class TestOpenAIProviderRouting:
         assert captured.get("api_key") == OPENAI_TEST_KEY
         assert "api_base" not in captured
 
-    def test_env_openai_custom_model_preserved(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_env_openai_custom_model_preserved(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Custom LLM_DEFAULT_MODEL is preserved verbatim in the 'openai/<model>' string."""
         custom_model = "gpt-4-turbo-preview"
         monkeypatch.setenv("LLM_PROVIDER", "openai")
@@ -292,9 +285,7 @@ class TestOllamaProviderRouting:
 
     # ── Model string ─────────────────────────────────────────────────────────
 
-    def test_model_string_starts_with_ollama_prefix(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_model_string_starts_with_ollama_prefix(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """LLMSettings.litellm_model starts with 'ollama/' when LLM_PROVIDER=ollama."""
         monkeypatch.setenv("LLM_PROVIDER", "ollama")
         monkeypatch.setenv("LLM_DEFAULT_MODEL", OLLAMA_TEST_MODEL)
@@ -305,9 +296,7 @@ class TestOllamaProviderRouting:
             f"Expected litellm_model to start with 'ollama/', got {s.llm.litellm_model!r}"
         )
 
-    def test_model_string_contains_model_name(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_model_string_contains_model_name(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Model name is preserved verbatim after the 'ollama/' prefix."""
         monkeypatch.setenv("LLM_PROVIDER", "ollama")
         monkeypatch.setenv("LLM_DEFAULT_MODEL", OLLAMA_TEST_MODEL)
@@ -421,9 +410,7 @@ class TestOllamaProviderRouting:
 
     # ── Env-var chain ─────────────────────────────────────────────────────────
 
-    def test_env_ollama_routes_full_chain(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_env_ollama_routes_full_chain(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """End-to-end env→settings→ChatLiteLLM routing for Ollama."""
         monkeypatch.setenv("LLM_PROVIDER", "ollama")
         monkeypatch.setenv("LLM_DEFAULT_MODEL", OLLAMA_TEST_MODEL)
@@ -438,9 +425,7 @@ class TestOllamaProviderRouting:
         assert captured.get("api_base") == OLLAMA_TEST_URL
         assert captured.get("api_key") == "ollama"
 
-    def test_env_ollama_tagged_model_preserved(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_env_ollama_tagged_model_preserved(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Model names with Ollama tags (e.g. 'codellama:13b') are preserved verbatim."""
         tagged_model = "codellama:13b"
         monkeypatch.setenv("LLM_PROVIDER", "ollama")
@@ -450,9 +435,7 @@ class TestOllamaProviderRouting:
         s = get_settings()
         assert s.llm.litellm_model == f"ollama/{tagged_model}"
 
-    def test_env_ollama_no_cloud_api_key_needed(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_env_ollama_no_cloud_api_key_needed(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Ollama does not require OPENAI_API_KEY or any other cloud API key."""
         monkeypatch.setenv("LLM_PROVIDER", "ollama")
         monkeypatch.setenv("LLM_DEFAULT_MODEL", OLLAMA_TEST_MODEL)
@@ -508,13 +491,9 @@ class TestProviderSwitchingViaEnv:
         ollama_kwargs = ProviderFactory.make_kwargs(_make_ollama_settings())
 
         # OpenAI must NOT have api_base (uses its default endpoint)
-        assert "api_base" not in openai_kwargs, (
-            "OpenAI should not have api_base in kwargs"
-        )
+        assert "api_base" not in openai_kwargs, "OpenAI should not have api_base in kwargs"
         # Ollama must have api_base (local server URL)
-        assert "api_base" in ollama_kwargs, (
-            "Ollama must have api_base in kwargs"
-        )
+        assert "api_base" in ollama_kwargs, "Ollama must have api_base in kwargs"
         assert ollama_kwargs["api_base"] == OLLAMA_TEST_URL
 
     def test_provider_switch_changes_api_key_semantics(self) -> None:
@@ -708,8 +687,7 @@ class TestRoutingDifferentiators:
         kwargs = ProviderFactory.make_kwargs(settings_no_key)
         assert kwargs["model"] == f"openai/{OPENAI_TEST_MODEL}"
         assert "api_key" not in kwargs, (
-            "Empty OpenAI API key should be excluded from kwargs "
-            "(litellm reads from env instead)"
+            "Empty OpenAI API key should be excluded from kwargs (litellm reads from env instead)"
         )
 
     def test_model_strings_differ_and_are_provider_prefixed(self) -> None:

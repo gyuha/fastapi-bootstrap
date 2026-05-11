@@ -84,4 +84,7 @@ class TestMakeMigrate:
         revisions = [path for path in _ALEMBIC_VERSIONS.glob("*.py") if path.name != "__init__.py"]
 
         assert revisions, "alembic/versions must contain an initial schema revision."
-        assert any("revision: str = \"0001_initial_schema\"" in p.read_text(encoding="utf-8") for p in revisions)
+        assert any(
+            'revision: str = "0001_initial_schema"' in p.read_text(encoding="utf-8")
+            for p in revisions
+        )

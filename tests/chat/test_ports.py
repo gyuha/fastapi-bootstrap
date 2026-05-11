@@ -39,10 +39,17 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from fastapi_bootstrap.core.config import LLMProvider, LLMSettings
-from fastapi_bootstrap.domains.chat.llm_client import DefaultLLMClientFactory, LLMClient, get_llm_client
-from fastapi_bootstrap.domains.chat.ports import AbstractLLMPort, LLMClientFactoryProtocol, LLMClientProtocol
+from fastapi_bootstrap.domains.chat.llm_client import (
+    DefaultLLMClientFactory,
+    LLMClient,
+    get_llm_client,
+)
+from fastapi_bootstrap.domains.chat.ports import (
+    AbstractLLMPort,
+    LLMClientFactoryProtocol,
+    LLMClientProtocol,
+)
 from fastapi_bootstrap.domains.chat.service import ChatService
-
 
 # ---------------------------------------------------------------------------
 # Helpers — minimal implementations of the protocols
@@ -329,8 +336,7 @@ class TestChatServiceProtocolDependency:
         )
         resolved_annotation = hints.get("llm_client")
         assert resolved_annotation is AbstractLLMPort, (
-            f"llm_client parameter should be typed as AbstractLLMPort, "
-            f"got {resolved_annotation!r}"
+            f"llm_client parameter should be typed as AbstractLLMPort, got {resolved_annotation!r}"
         )
 
 

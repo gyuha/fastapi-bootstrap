@@ -50,7 +50,7 @@ Inject a stub factory to avoid real LLM calls::
 from __future__ import annotations
 
 import uuid
-from typing import Any, Sequence
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -460,7 +460,7 @@ async def send_message(
         )
 
     # Persist user message
-    user_msg = await repo.add_message(conversation_id, "user", body.content)
+    await repo.add_message(conversation_id, "user", body.content)
 
     # Build message history
     lc_messages: list[BaseMessage] = []
@@ -560,8 +560,15 @@ async def _auto_title(
     """Generate and save an auto-title after the first turn."""
     try:
         title_messages = [
-            SystemMessage(content="Generate a short, concise title (max 8 words) for this conversation. Reply with only the title text, no quotes or punctuation."),
-            HumanMessage(content=f"User: {user_content[:200]}\nAssistant: {assistant_content[:200]}"),
+            SystemMessage(
+                content=(
+                    "Generate a short, concise title (max 8 words) for this conversation. "
+                    "Reply with only the title text, no quotes or punctuation."
+                )
+            ),
+            HumanMessage(
+                content=f"User: {user_content[:200]}\nAssistant: {assistant_content[:200]}"
+            ),
         ]
         title_result = await service.complete(title_messages)
         title = str(title_result.content).strip()[:256]

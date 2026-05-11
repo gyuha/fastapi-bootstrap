@@ -42,7 +42,6 @@ from typing import Any
 
 from fastapi_bootstrap.core.config import LLMProvider, LLMSettings
 
-
 # ---------------------------------------------------------------------------
 # Supported provider registry
 # ---------------------------------------------------------------------------
@@ -97,7 +96,7 @@ class ProviderFactory:
     @classmethod
     def make_model_string(
         cls,
-        provider: "str | LLMProvider",
+        provider: str | LLMProvider,
         model: str,
         *,
         azure_deployment: str = "",
@@ -142,9 +141,7 @@ class ProviderFactory:
         'ollama/llama3.2'
         """
         # Normalise to string value for uniform comparison
-        provider_str: str = (
-            provider.value if isinstance(provider, LLMProvider) else provider
-        )
+        provider_str: str = provider.value if isinstance(provider, LLMProvider) else provider
 
         # Validate against known providers
         try:
@@ -152,8 +149,7 @@ class ProviderFactory:
         except ValueError:
             known = sorted(p.value for p in LLMProvider)
             raise ValueError(
-                f"Unsupported LLM provider: {provider_str!r}. "
-                f"Known providers: {known}"
+                f"Unsupported LLM provider: {provider_str!r}. Known providers: {known}"
             ) from None
 
         # ── Azure: deployment-name routing ────────────────────────────────

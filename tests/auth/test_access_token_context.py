@@ -100,9 +100,14 @@ def test_decode_access_token_context_returns_jti_and_exp() -> None:
 
     assert context.jti == "access-jti-123"
     assert context.expires_at.tzinfo is not None
-    assert before + timedelta(minutes=14, seconds=55) <= context.expires_at <= before + timedelta(
-        minutes=15,
-        seconds=5,
+    assert (
+        before + timedelta(minutes=14, seconds=55)
+        <= context.expires_at
+        <= before
+        + timedelta(
+            minutes=15,
+            seconds=5,
+        )
     )
 
 
@@ -110,9 +115,7 @@ def test_decode_access_token_context_rejects_refresh_token_type() -> None:
     from fastapi_bootstrap.core.exceptions import UnauthorizedError
     from fastapi_bootstrap.domains.auth.security import create_refresh_token
 
-    refresh_token, _jti, _family_id = create_refresh_token(
-        "00000000-0000-4000-8000-000000000001"
-    )
+    refresh_token, _jti, _family_id = create_refresh_token("00000000-0000-4000-8000-000000000001")
 
     with pytest.raises(UnauthorizedError, match="access token"):
         security.decode_access_token_context(refresh_token)
@@ -165,21 +168,30 @@ async def test_blacklist_jti_stores_ttl_until_token_expiration() -> None:
 async def test_is_jti_blacklisted_reads_stored_jti_existence() -> None:
     redis = CapturingRedis()
 
-    assert await security.is_jti_blacklisted(  # type: ignore[arg-type]
-        redis,
-        "stored-access-jti",
-    ) is False
+    assert (
+        await security.is_jti_blacklisted(  # type: ignore[arg-type]
+            redis,
+            "stored-access-jti",
+        )
+        is False
+    )
 
     await security.blacklist_jti(redis, "stored-access-jti", ttl_seconds=60)  # type: ignore[arg-type]
 
-    assert await security.is_jti_blacklisted(  # type: ignore[arg-type]
-        redis,
-        "stored-access-jti",
-    ) is True
-    assert await security.is_jti_blacklisted(  # type: ignore[arg-type]
-        redis,
-        "other-access-jti",
-    ) is False
+    assert (
+        await security.is_jti_blacklisted(  # type: ignore[arg-type]
+            redis,
+            "stored-access-jti",
+        )
+        is True
+    )
+    assert (
+        await security.is_jti_blacklisted(  # type: ignore[arg-type]
+            redis,
+            "other-access-jti",
+        )
+        is False
+    )
 
 
 async def test_logout_route_rejects_missing_bearer_token_before_service_resolution(
@@ -229,7 +241,7 @@ async def test_logout_route_passes_current_access_token_jti_and_exp_to_service(
     assert response.status_code == 204
     assert len(logout_service.calls) == 1
     call = logout_service.calls[0]
-    assert call["refresh_token"] == "refresh.jwt"  # noqa: S105
+    assert call["refresh_token"] == "refresh.jwt"
     assert call["access_jti"] == "logout-jti"
     assert isinstance(call["access_expires_at"], datetime)
     assert call["access_expires_at"].tzinfo is not None

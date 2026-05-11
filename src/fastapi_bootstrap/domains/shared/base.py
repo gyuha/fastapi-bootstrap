@@ -29,7 +29,6 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-
 # ---------------------------------------------------------------------------
 # Entity — domain object with stable identity
 # ---------------------------------------------------------------------------

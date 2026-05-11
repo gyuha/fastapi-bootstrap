@@ -10,7 +10,7 @@ Usage::
 from __future__ import annotations
 
 import uuid
-from typing import Sequence
+from collections.abc import Sequence
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -99,8 +99,6 @@ class ChatRepository:
         conv_id: uuid.UUID,
     ) -> Sequence[Message]:
         result = await self._session.execute(
-            select(Message)
-            .where(Message.conversation_id == conv_id)
-            .order_by(Message.created_at)
+            select(Message).where(Message.conversation_id == conv_id).order_by(Message.created_at)
         )
         return result.scalars().all()

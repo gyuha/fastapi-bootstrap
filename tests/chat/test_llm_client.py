@@ -31,7 +31,6 @@ from langchain_core.messages.ai import AIMessageChunk
 from fastapi_bootstrap.core.config import LLMProvider, LLMSettings
 from fastapi_bootstrap.domains.chat.llm_client import LLMClient, get_llm_client
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -77,9 +76,7 @@ def _make_client(
     Returns (client, mock_chat_instance).
     """
     settings = _make_llm_settings(provider, model)
-    with patch(
-        "fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"
-    ) as MockChatLiteLLM:
+    with patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM") as MockChatLiteLLM:
         mock_instance = mock_chat or MagicMock()
         MockChatLiteLLM.return_value = mock_instance
         client = LLMClient(settings=settings, **override_kwargs)
@@ -356,9 +353,9 @@ class TestAStream:
         """Empty content chunks (e.g. finish_reason markers) must not be yielded."""
         chunks = [
             AIMessageChunk(content="token1"),
-            AIMessageChunk(content=""),   # should be skipped
+            AIMessageChunk(content=""),  # should be skipped
             AIMessageChunk(content="token2"),
-            AIMessageChunk(content=""),   # should be skipped
+            AIMessageChunk(content=""),  # should be skipped
         ]
 
         async def _fake_astream(messages: Any, **kwargs: Any):  # type: ignore[no-untyped-def]
@@ -482,8 +479,12 @@ class TestGetLlmClient:
             patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"),
         ):
             mock_settings = MagicMock()
-            mock_llm_settings = _make_llm_settings("anthropic", "claude-3-5-haiku-20241022",
-                                                    anthropic_api_key="sk-ant", openai_api_key="")
+            mock_llm_settings = _make_llm_settings(
+                "anthropic",
+                "claude-3-5-haiku-20241022",
+                anthropic_api_key="sk-ant",
+                openai_api_key="",
+            )
             mock_settings.llm = mock_llm_settings
             mock_get_settings.return_value = mock_settings
 
@@ -572,6 +573,5 @@ class TestProviderPortability:
                 client = LLMClient(settings=_make_llm_settings(provider, model, **extra))
 
             assert client.model_string.startswith(f"{provider}/"), (
-                f"Expected model string to start with '{provider}/', "
-                f"got {client.model_string!r}"
+                f"Expected model string to start with '{provider}/', got {client.model_string!r}"
             )

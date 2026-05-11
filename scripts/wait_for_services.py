@@ -26,6 +26,7 @@ wait_for_services.py — docker-compose 서비스 기동 및 헬스체크 검증
     1 — 타임아웃 또는 서비스 비정상 종료
     2 — 필수 의존성(docker / docker compose) 미설치
 """
+
 from __future__ import annotations
 
 import json
@@ -34,13 +35,13 @@ import shutil
 import subprocess
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 # ── 설정 ────────────────────────────────────────────────────────────────────
-DEFAULT_TIMEOUT = 60       # 기본 헬스체크 폴링 최대 대기 시간 (초)
-POLL_INTERVAL = 2          # 폴링 간격 (초)
+DEFAULT_TIMEOUT = 60  # 기본 헬스체크 폴링 최대 대기 시간 (초)
+POLL_INTERVAL = 2  # 폴링 간격 (초)
 COMPOSE_FILE = os.environ.get("COMPOSE_FILE", "docker-compose.yml")
 
 # 헬스체크 대상 서비스 (healthcheck 블록이 정의된 서비스)
@@ -50,9 +51,7 @@ HealthStatus = Literal["healthy", "unhealthy", "starting", "none", "exited", "un
 
 # ── ANSI 색상 ────────────────────────────────────────────────────────────────
 _USE_COLOR = (
-    sys.platform != "win32"
-    and hasattr(sys.stdout, "fileno")
-    and os.isatty(sys.stdout.fileno())
+    sys.platform != "win32" and hasattr(sys.stdout, "fileno") and os.isatty(sys.stdout.fileno())
 )
 
 
@@ -266,8 +265,10 @@ def wait_for_service(
 
         if remaining <= 0:
             # 타임아웃
-            print(f"\r{_c('[TIMEOUT]', '1;31')} {service}: {last_status:<12}  "
-                  f"({_fmt_elapsed(elapsed)} / {_fmt_elapsed(DEFAULT_TIMEOUT)})  ")
+            print(
+                f"\r{_c('[TIMEOUT]', '1;31')} {service}: {last_status:<12}  "
+                f"({_fmt_elapsed(elapsed)} / {_fmt_elapsed(DEFAULT_TIMEOUT)})  "
+            )
             return WaitResult(
                 service=service,
                 success=False,
@@ -279,8 +280,10 @@ def wait_for_service(
         last_status = health
 
         if health == "healthy":
-            print(f"\r{_c('[OK]', '1;32')}    {service}: {_c('healthy', '1;32'):<22}  "
-                  f"({_fmt_elapsed(elapsed)})")
+            print(
+                f"\r{_c('[OK]', '1;32')}    {service}: {_c('healthy', '1;32'):<22}  "
+                f"({_fmt_elapsed(elapsed)})"
+            )
             return WaitResult(
                 service=service,
                 success=True,
@@ -289,8 +292,10 @@ def wait_for_service(
             )
 
         if health in ("unhealthy", "exited", "dead"):
-            print(f"\r{_c('[FAIL]', '1;31')}  {service}: {_c(health, '1;31'):<22}  "
-                  f"({_fmt_elapsed(elapsed)})")
+            print(
+                f"\r{_c('[FAIL]', '1;31')}  {service}: {_c(health, '1;31'):<22}  "
+                f"({_fmt_elapsed(elapsed)})"
+            )
             return WaitResult(
                 service=service,
                 success=False,
@@ -345,10 +350,7 @@ def main() -> None:
 
     # 3. 정의된 서비스 목록 조회 및 필터링
     defined_services = get_defined_services(compose_cmd)
-    target_services = [
-        svc for svc in SERVICES_WITH_HEALTHCHECK
-        if svc in defined_services
-    ]
+    target_services = [svc for svc in SERVICES_WITH_HEALTHCHECK if svc in defined_services]
     skipped = [svc for svc in SERVICES_WITH_HEALTHCHECK if svc not in defined_services]
     if skipped:
         log_warn(f"compose 파일에 없는 서비스 (건너뜀): {', '.join(skipped)}")
@@ -402,7 +404,7 @@ def main() -> None:
 
     # 6. 전체 성공
     print()
-    log_ok(f"모든 서비스가 healthy 상태입니다 ✓")
+    log_ok("모든 서비스가 healthy 상태입니다 ✓")
     log_info(f"성공한 서비스: {', '.join(r.service for r in succeeded)}")
     log_info(f"총 경과 시간: {_fmt_elapsed(total_elapsed)}")
 

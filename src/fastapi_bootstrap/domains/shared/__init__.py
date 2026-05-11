@@ -29,16 +29,13 @@ from fastapi_bootstrap.domains.shared.types import (
 )
 
 __all__ = [
-    # Base classes
-    "Entity",
     "AggregateRoot",
-    "ValueObject",
-    # Events
+    "ConversationId",
     "DomainEvent",
     "DomainEventBus",
-    # Type aliases
-    "UserId",
-    "ConversationId",
+    "Entity",
     "MessageId",
     "PermissionKey",
+    "UserId",
+    "ValueObject",
 ]

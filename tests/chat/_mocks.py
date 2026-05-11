@@ -35,7 +35,6 @@ from typing import Any
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.messages.ai import AIMessageChunk
 
-
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -199,10 +198,7 @@ class FakeStreamingChatLiteLLM(FakeChatLiteLLM):
     ) -> None:
         if token_count is not None and len(response) > 0:
             chunk_size = max(1, len(response) // token_count)
-            tokens = [
-                response[i : i + chunk_size]
-                for i in range(0, len(response), chunk_size)
-            ]
+            tokens = [response[i : i + chunk_size] for i in range(0, len(response), chunk_size)]
         else:
             tokens = None  # falls back to FAKE_STREAM_TOKENS in parent
         super().__init__(response=response, stream_tokens=tokens, **kwargs)

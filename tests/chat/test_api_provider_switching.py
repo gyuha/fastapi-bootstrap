@@ -187,7 +187,7 @@ class _TrackingFactory:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
+@pytest.fixture
 def chat_test_app() -> FastAPI:
     """Minimal FastAPI app with only the chat router mounted.
 
@@ -464,12 +464,8 @@ class TestChatAPIProviderSwitching:
         assert openai_captured["model"] != ollama_captured["model"]
 
         # OpenAI: no api_base; Ollama: api_base=<local URL>
-        assert "api_base" not in openai_captured, (
-            "OpenAI must not set api_base"
-        )
-        assert "api_base" in ollama_captured, (
-            "Ollama must set api_base"
-        )
+        assert "api_base" not in openai_captured, "OpenAI must not set api_base"
+        assert "api_base" in ollama_captured, "Ollama must set api_base"
         assert ollama_captured["api_base"] == OLLAMA_TEST_URL
 
         # OpenAI: real API key; Ollama: 'ollama' sentinel
@@ -500,7 +496,9 @@ class TestChatAPIProviderSwitchingViaOverrides:
             model_string=f"openai/{OPENAI_DEFAULT_MODEL}",
             response="OpenAI response via DI override",
         )
-        chat_test_app.dependency_overrides[get_llm_factory] = lambda: _TrackingFactory(openai_client)
+        chat_test_app.dependency_overrides[get_llm_factory] = lambda: _TrackingFactory(
+            openai_client
+        )
 
         try:
             client = TestClient(chat_test_app, raise_server_exceptions=True)
@@ -524,7 +522,9 @@ class TestChatAPIProviderSwitchingViaOverrides:
             model_string=f"ollama/{OLLAMA_DEFAULT_MODEL}",
             response="Ollama response via DI override",
         )
-        chat_test_app.dependency_overrides[get_llm_factory] = lambda: _TrackingFactory(ollama_client)
+        chat_test_app.dependency_overrides[get_llm_factory] = lambda: _TrackingFactory(
+            ollama_client
+        )
 
         try:
             client = TestClient(chat_test_app, raise_server_exceptions=True)
@@ -557,7 +557,9 @@ class TestChatAPIProviderSwitchingViaOverrides:
         )
 
         # ── OpenAI scenario ─────────────────────────────────────────────────
-        chat_test_app.dependency_overrides[get_llm_factory] = lambda: _TrackingFactory(openai_client)
+        chat_test_app.dependency_overrides[get_llm_factory] = lambda: _TrackingFactory(
+            openai_client
+        )
         try:
             c1 = TestClient(chat_test_app, raise_server_exceptions=True)
             r1 = c1.post(_CHAT_COMPLETE_URL, json=_OPENAI_REQUEST)
@@ -565,7 +567,9 @@ class TestChatAPIProviderSwitchingViaOverrides:
             chat_test_app.dependency_overrides.clear()
 
         # ── Ollama scenario (only the factory override changes) ──────────────
-        chat_test_app.dependency_overrides[get_llm_factory] = lambda: _TrackingFactory(ollama_client)
+        chat_test_app.dependency_overrides[get_llm_factory] = lambda: _TrackingFactory(
+            ollama_client
+        )
         try:
             c2 = TestClient(chat_test_app, raise_server_exceptions=True)
             r2 = c2.post(_CHAT_COMPLETE_URL, json=_OLLAMA_REQUEST)
@@ -593,7 +597,9 @@ class TestChatAPIProviderSwitchingViaOverrides:
             model_string=f"openai/{OPENAI_DEFAULT_MODEL}",
             response="Messages received",
         )
-        chat_test_app.dependency_overrides[get_llm_factory] = lambda: _TrackingFactory(tracking_client)
+        chat_test_app.dependency_overrides[get_llm_factory] = lambda: _TrackingFactory(
+            tracking_client
+        )
 
         try:
             client = TestClient(chat_test_app, raise_server_exceptions=True)
@@ -691,7 +697,9 @@ class TestChatAPIStreamingProviderRouting:
             provider="openai",
             model_string=f"openai/{OPENAI_DEFAULT_MODEL}",
         )
-        chat_test_app.dependency_overrides[get_llm_factory] = lambda: _TrackingFactory(tracking_client)
+        chat_test_app.dependency_overrides[get_llm_factory] = lambda: _TrackingFactory(
+            tracking_client
+        )
 
         try:
             client = TestClient(chat_test_app, raise_server_exceptions=True)
@@ -714,7 +722,9 @@ class TestChatAPIStreamingProviderRouting:
             provider="openai",
             model_string=f"openai/{OPENAI_DEFAULT_MODEL}",
         )
-        chat_test_app.dependency_overrides[get_llm_factory] = lambda: _TrackingFactory(tracking_client)
+        chat_test_app.dependency_overrides[get_llm_factory] = lambda: _TrackingFactory(
+            tracking_client
+        )
 
         try:
             client = TestClient(chat_test_app, raise_server_exceptions=True)
@@ -725,9 +735,7 @@ class TestChatAPIStreamingProviderRouting:
             chat_test_app.dependency_overrides.clear()
 
         done_lines = [ln for ln in lines if "[DONE]" in ln]
-        assert len(done_lines) >= 1, (
-            f"Expected at least one 'data: [DONE]' line, got: {lines}"
-        )
+        assert len(done_lines) >= 1, f"Expected at least one 'data: [DONE]' line, got: {lines}"
 
 
 # ---------------------------------------------------------------------------
@@ -855,7 +863,9 @@ class TestChatAPIRequestValidation:
             model_string=f"openai/{OPENAI_DEFAULT_MODEL}",
             response="Got system prompt",
         )
-        chat_test_app.dependency_overrides[get_llm_factory] = lambda: _TrackingFactory(tracking_client)
+        chat_test_app.dependency_overrides[get_llm_factory] = lambda: _TrackingFactory(
+            tracking_client
+        )
 
         try:
             client = TestClient(chat_test_app, raise_server_exceptions=True)
@@ -891,7 +901,9 @@ class TestChatAPIRequestValidation:
             model_string=f"openai/{OPENAI_DEFAULT_MODEL}",
             response="Understood",
         )
-        chat_test_app.dependency_overrides[get_llm_factory] = lambda: _TrackingFactory(tracking_client)
+        chat_test_app.dependency_overrides[get_llm_factory] = lambda: _TrackingFactory(
+            tracking_client
+        )
 
         try:
             client = TestClient(chat_test_app, raise_server_exceptions=True)

@@ -27,7 +27,7 @@ Binding pattern::
     #          ↓
     #   get_chat_service(factory: LLMClientFactoryProtocol)  →  ChatService
     #          ↓ (factory.get_llm_client())
-    #   ChatService(llm_client=<LLMClientProtocol>)
+    #   ChatService(llm_client=<AbstractLLMPort>)
 
 Usage in a FastAPI router::
 
@@ -68,7 +68,6 @@ from fastapi import Depends
 from fastapi_bootstrap.domains.chat.ports import LLMClientFactoryProtocol
 from fastapi_bootstrap.domains.chat.service import ChatService
 
-
 # ---------------------------------------------------------------------------
 # Factory binding — concrete registered as interface
 # ---------------------------------------------------------------------------
@@ -100,7 +99,7 @@ def get_llm_factory() -> LLMClientFactoryProtocol:
     # Any code that imports `from container import *` or inspects
     # `vars(container)` will NOT see DefaultLLMClientFactory, enforcing the
     # architecture boundary at inspection time as well as import time.
-    from fastapi_bootstrap.domains.chat.llm_client import DefaultLLMClientFactory  # noqa: PLC0415
+    from fastapi_bootstrap.domains.chat.llm_client import DefaultLLMClientFactory
 
     return DefaultLLMClientFactory()
 

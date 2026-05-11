@@ -54,7 +54,7 @@ def _error_response(
 
 
 async def _http_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    assert isinstance(exc, HTTPException)  # noqa: S101
+    assert isinstance(exc, HTTPException)
     logger.warning(
         "http_exception",
         status_code=exc.status_code,
@@ -64,7 +64,7 @@ async def _http_exception_handler(request: Request, exc: Exception) -> JSONRespo
 
 
 async def _validation_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    assert isinstance(exc, RequestValidationError)  # noqa: S101
+    assert isinstance(exc, RequestValidationError)
     errors = exc.errors()
     logger.warning("validation_error", errors=errors)
     return _error_response(
@@ -90,9 +90,9 @@ async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSON
 
 def register_exception_handlers(application: FastAPI) -> None:
     """Register all exception handlers on *application*."""
-    application.add_exception_handler(HTTPException, _http_exception_handler)  # type: ignore[arg-type]
-    application.add_exception_handler(RequestValidationError, _validation_exception_handler)  # type: ignore[arg-type]
-    application.add_exception_handler(Exception, _unhandled_exception_handler)  # type: ignore[arg-type]
+    application.add_exception_handler(HTTPException, _http_exception_handler)
+    application.add_exception_handler(RequestValidationError, _validation_exception_handler)
+    application.add_exception_handler(Exception, _unhandled_exception_handler)
 
 
 # ---------------------------------------------------------------------------

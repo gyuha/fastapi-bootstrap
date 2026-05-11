@@ -209,7 +209,7 @@ class LLMClientFactoryProtocol(Protocol):
             ...
     """
 
-    def get_llm_client(self) -> LLMClientProtocol:
+    def get_llm_client(self) -> AbstractLLMPort:
         """Return a fully configured LLM client instance.
 
         Implementations read provider settings (e.g. from environment
@@ -218,8 +218,8 @@ class LLMClientFactoryProtocol(Protocol):
 
         Returns
         -------
-        LLMClientProtocol
-            A configured LLM client satisfying :class:`LLMClientProtocol`.
+        AbstractLLMPort
+            A configured LLM client satisfying :class:`AbstractLLMPort`.
         """
         ...
 
