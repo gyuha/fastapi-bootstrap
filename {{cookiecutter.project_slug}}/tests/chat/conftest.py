@@ -231,7 +231,7 @@ def patched_chat_litellm() -> Any:  # type: ignore[misc]
             assert kwargs["model"] == "openai/gpt-4o-mini"
     """
     with patch(
-        "{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM"
+        "{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM"
     ) as mock_cls:
         yield mock_cls
 
@@ -254,7 +254,7 @@ def fake_chat_litellm_openai() -> Any:  # type: ignore[misc]
         api_key=OPENAI_TEST_KEY,
     )
     with patch(
-        "{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM",
+        "{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM",
         return_value=fake_instance,
     ):
         yield fake_instance
@@ -279,7 +279,7 @@ def fake_chat_litellm_ollama() -> Any:  # type: ignore[misc]
         api_key="ollama",
     )
     with patch(
-        "{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM",
+        "{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM",
         return_value=fake_instance,
     ):
         yield fake_instance
@@ -357,7 +357,7 @@ def llm_client_ollama(
 
 @pytest.fixture()
 def mock_llm_client() -> MagicMock:
-    """Return a :class:`MagicMock` satisfying :class:`LLMClientProtocol`.
+    """Return a :class:`MagicMock` satisfying both :class:`LLMClientProtocol` and :class:`AbstractLLMPort`.
 
     Use when you need to assert on call counts or capture arguments passed
     to the LLM client — typically in :class:`ChatService` tests.
@@ -365,30 +365,37 @@ def mock_llm_client() -> MagicMock:
     Returns
     -------
     MagicMock
-        Mock with ``ainvoke`` (:class:`AsyncMock`) and ``astream`` (async generator).
+        Mock with ``ainvoke``/``invoke`` (:class:`AsyncMock`) and
+        ``astream``/``stream`` (async generators).
 
     Usage::
 
-        async def test_service_calls_ainvoke_once(mock_llm_client):
+        async def test_service_calls_invoke_once(mock_llm_client):
             from langchain_core.messages import HumanMessage
             service = ChatService(llm_client=mock_llm_client)
             await service.complete([HumanMessage(content="hi")])
-            mock_llm_client.ainvoke.assert_awaited_once()
+            mock_llm_client.invoke.assert_awaited_once()
     """
-    mock = MagicMock(spec=["ainvoke", "astream"])
+    mock = MagicMock(spec=["ainvoke", "astream", "invoke", "stream"])
     mock.ainvoke = AsyncMock(return_value=AIMessage(content=FAKE_RESPONSE_TEXT))
+    mock.invoke = AsyncMock(return_value=AIMessage(content=FAKE_RESPONSE_TEXT))
 
     async def _astream(messages: Any, **kwargs: Any) -> AsyncIterator[str]:
         for token in FAKE_STREAM_TOKENS:
             yield token
 
+    async def _stream(messages: Any, **kwargs: Any) -> AsyncIterator[str]:
+        for token in FAKE_STREAM_TOKENS:
+            yield token
+
     mock.astream = _astream
+    mock.stream = _stream
     return mock
 
 
 @pytest.fixture()
 def mock_llm_client_openai() -> MagicMock:
-    """Return a :class:`MagicMock` :class:`LLMClientProtocol` wired for OpenAI.
+    """Return a :class:`MagicMock` satisfying both protocols, wired for OpenAI.
 
     Adds ``model_string`` and ``provider`` attributes for tests that assert
     on provider-specific routing properties.
@@ -398,22 +405,28 @@ def mock_llm_client_openai() -> MagicMock:
     MagicMock
         Mock with ``model_string="openai/gpt-4o-mini"``, ``provider="openai"``.
     """
-    mock = MagicMock(spec=["ainvoke", "astream", "model_string", "provider"])
+    mock = MagicMock(spec=["ainvoke", "astream", "invoke", "stream", "model_string", "provider"])
     mock.model_string = f"openai/{OPENAI_DEFAULT_MODEL}"
     mock.provider = "openai"
     mock.ainvoke = AsyncMock(return_value=AIMessage(content=FAKE_RESPONSE_TEXT))
+    mock.invoke = AsyncMock(return_value=AIMessage(content=FAKE_RESPONSE_TEXT))
 
     async def _astream(messages: Any, **kwargs: Any) -> AsyncIterator[str]:
         for token in FAKE_STREAM_TOKENS:
             yield token
 
+    async def _stream(messages: Any, **kwargs: Any) -> AsyncIterator[str]:
+        for token in FAKE_STREAM_TOKENS:
+            yield token
+
     mock.astream = _astream
+    mock.stream = _stream
     return mock
 
 
 @pytest.fixture()
 def mock_llm_client_ollama() -> MagicMock:
-    """Return a :class:`MagicMock` :class:`LLMClientProtocol` wired for Ollama.
+    """Return a :class:`MagicMock` satisfying both protocols, wired for Ollama.
 
     Adds ``model_string`` and ``provider`` attributes for tests that assert
     on Ollama-specific routing properties.
@@ -423,16 +436,22 @@ def mock_llm_client_ollama() -> MagicMock:
     MagicMock
         Mock with ``model_string="ollama/llama3.2"``, ``provider="ollama"``.
     """
-    mock = MagicMock(spec=["ainvoke", "astream", "model_string", "provider"])
+    mock = MagicMock(spec=["ainvoke", "astream", "invoke", "stream", "model_string", "provider"])
     mock.model_string = f"ollama/{OLLAMA_DEFAULT_MODEL}"
     mock.provider = "ollama"
     mock.ainvoke = AsyncMock(return_value=AIMessage(content=FAKE_RESPONSE_TEXT))
+    mock.invoke = AsyncMock(return_value=AIMessage(content=FAKE_RESPONSE_TEXT))
 
     async def _astream(messages: Any, **kwargs: Any) -> AsyncIterator[str]:
         for token in FAKE_STREAM_TOKENS:
             yield token
 
+    async def _stream(messages: Any, **kwargs: Any) -> AsyncIterator[str]:
+        for token in FAKE_STREAM_TOKENS:
+            yield token
+
     mock.astream = _astream
+    mock.stream = _stream
     return mock
 
 

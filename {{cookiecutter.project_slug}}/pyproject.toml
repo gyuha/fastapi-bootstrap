@@ -64,10 +64,9 @@ dependencies = [
     # ── Rate limiting ─────────────────────────────────────────────────────
     "slowapi>=0.1.9",                    # Redis-backed rate limiting (per-user / per-IP)
 
-    # ── Streaming ─────────────────────────────────────────────────────────
-    "sse-starlette>=2.1.0",              # Server-Sent Events for LLM token streaming
     {% if cookiecutter.include_chat_domain == "yes" %}
-    # ── LLM / Chat domain ─────────────────────────────────────────────────
+    # ── Streaming / LLM / Chat domain ─────────────────────────────────────
+    "sse-starlette>=2.1.0",              # Server-Sent Events for LLM token streaming
     "langchain>=0.3.0",
     "langchain-core>=0.3.0",            # Core abstractions (Runnable, BaseMessage, etc.)
     "langchain-community>=0.3.0",

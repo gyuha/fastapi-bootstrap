@@ -6,9 +6,11 @@ Verifies that:
   :class:`DefaultLLMClientFactory`
 * Minimal mock classes that implement only the required methods also satisfy
   the protocols (structural/duck-typing confirmation)
-* :class:`ChatService` accepts any :class:`LLMClientProtocol` implementor
-* :class:`ChatService.complete` delegates to ``llm_client.ainvoke``
-* :class:`ChatService.stream` delegates to ``llm_client.astream``
+* :class:`ChatService` accepts any :class:`AbstractLLMPort` implementor
+* :class:`ChatService.complete` delegates to ``llm_client.invoke`` (AbstractLLMPort)
+* :class:`ChatService.stream` delegates to ``llm_client.stream`` (AbstractLLMPort)
+* :class:`ChatService.__init__` is typed as :class:`AbstractLLMPort` (not LLMClientProtocol)
+* The service module has **no runtime LangChain imports** (only TYPE_CHECKING)
 * :class:`DefaultLLMClientFactory.get_llm_client` returns an :class:`LLMClient`
 
 All tests are pure unit tests — no network calls, no DB, no Redis.
@@ -20,9 +22,10 @@ Covered scenarios
 * Minimal mock satisfies LLMClientProtocol (structural subtyping)
 * Minimal mock satisfies LLMClientFactoryProtocol (structural subtyping)
 * Non-conforming objects do NOT satisfy the protocols
-* ChatService.complete returns AIMessage from llm_client.ainvoke
-* ChatService.stream yields chunks from llm_client.astream
-* ChatService depends only on the protocol type (verified via type hints)
+* ChatService.complete returns AIMessage from llm_client.invoke
+* ChatService.stream yields chunks from llm_client.stream
+* ChatService typed as AbstractLLMPort (verified via type hints)
+* No runtime langchain_core imports in service module namespace
 * DefaultLLMClientFactory.get_llm_client delegates to get_settings().llm
 """
 
@@ -37,7 +40,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from {{ cookiecutter.package_name }}.core.config import LLMProvider, LLMSettings
 from {{ cookiecutter.package_name }}.domains.chat.llm_client import DefaultLLMClientFactory, LLMClient, get_llm_client
-from {{ cookiecutter.package_name }}.domains.chat.ports import LLMClientFactoryProtocol, LLMClientProtocol
+from {{ cookiecutter.package_name }}.domains.chat.ports import AbstractLLMPort, LLMClientFactoryProtocol, LLMClientProtocol
 from {{ cookiecutter.package_name }}.domains.chat.service import ChatService
 
 
@@ -47,12 +50,20 @@ from {{ cookiecutter.package_name }}.domains.chat.service import ChatService
 
 
 class _MinimalLLMClient:
-    """Bare-minimum class satisfying LLMClientProtocol — for protocol tests."""
+    """Bare-minimum class satisfying both LLMClientProtocol and AbstractLLMPort."""
 
     async def ainvoke(self, messages: list[Any], **kwargs: Any) -> AIMessage:
         return AIMessage(content="minimal-response")
 
     async def astream(self, messages: list[Any], **kwargs: Any) -> AsyncIterator[str]:
+        for chunk in ["hello", " world"]:
+            yield chunk
+
+    # AbstractLLMPort interface
+    async def invoke(self, messages: list[Any], **kwargs: Any) -> AIMessage:
+        return AIMessage(content="minimal-response")
+
+    async def stream(self, messages: list[Any], **kwargs: Any) -> AsyncIterator[str]:
         for chunk in ["hello", " world"]:
             yield chunk
 
@@ -95,15 +106,21 @@ def _make_llm_settings(provider: str = "openai", model: str = "gpt-4o-mini") -> 
 
 
 def _make_mock_llm_client(response: str = "test response") -> MagicMock:
-    """Return a MagicMock whose ainvoke and astream are properly stubbed."""
-    mock = MagicMock(spec=["ainvoke", "astream"])
+    """Return a MagicMock whose ainvoke/astream and invoke/stream are properly stubbed."""
+    mock = MagicMock(spec=["ainvoke", "astream", "invoke", "stream"])
     mock.ainvoke = AsyncMock(return_value=AIMessage(content=response))
+    mock.invoke = AsyncMock(return_value=AIMessage(content=response))
 
     async def _astream(messages: Any, **kwargs: Any) -> AsyncIterator[str]:
         for chunk in [response]:
             yield chunk
 
+    async def _stream(messages: Any, **kwargs: Any) -> AsyncIterator[str]:
+        for chunk in [response]:
+            yield chunk
+
     mock.astream = _astream
+    mock.stream = _stream
     return mock
 
 
@@ -117,7 +134,7 @@ class TestLLMClientProtocolStructural:
 
     def test_llm_client_satisfies_protocol(self) -> None:
         """The concrete LLMClient must satisfy LLMClientProtocol."""
-        with patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM"):
+        with patch("{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM"):
             client = LLMClient(settings=_make_llm_settings())
         assert isinstance(client, LLMClientProtocol)
 
@@ -180,7 +197,7 @@ class TestDefaultLLMClientFactory:
     def test_returns_llm_client_instance(self) -> None:
         with (
             patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.get_settings") as mock_get_settings,
-            patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM"),
+            patch("{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM"),
         ):
             mock_settings = MagicMock()
             mock_settings.llm = _make_llm_settings("openai", "gpt-4o-mini")
@@ -195,7 +212,7 @@ class TestDefaultLLMClientFactory:
         """get_llm_client() return value must satisfy LLMClientProtocol."""
         with (
             patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.get_settings") as mock_get_settings,
-            patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM"),
+            patch("{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM"),
         ):
             mock_settings = MagicMock()
             mock_settings.llm = _make_llm_settings()
@@ -209,7 +226,7 @@ class TestDefaultLLMClientFactory:
         """Factory must call get_settings() to source LLM configuration."""
         with (
             patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.get_settings") as mock_get_settings,
-            patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM"),
+            patch("{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM"),
         ):
             mock_settings = MagicMock()
             mock_settings.llm = _make_llm_settings()
@@ -244,7 +261,7 @@ class TestGetLlmClientModuleFunction:
     def test_get_llm_client_returns_llm_client(self) -> None:
         with (
             patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.get_settings") as mock_get_settings,
-            patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM"),
+            patch("{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM"),
         ):
             mock_settings = MagicMock()
             mock_settings.llm = _make_llm_settings()
@@ -273,7 +290,7 @@ class TestChatServiceProtocolDependency:
 
     def test_accepts_concrete_llm_client(self) -> None:
         """ChatService can be constructed with the concrete LLMClient."""
-        with patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM"):
+        with patch("{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM"):
             client = LLMClient(settings=_make_llm_settings())
         service = ChatService(llm_client=client)
         assert service is not None
@@ -289,11 +306,14 @@ class TestChatServiceProtocolDependency:
         service = ChatService(llm_client=mock)
         assert service is not None
 
-    def test_internal_llm_type_hint_is_protocol(self) -> None:
-        """ChatService.__init__ must declare llm_client as LLMClientProtocol.
+    def test_internal_llm_type_hint_is_abstract_port(self) -> None:
+        """ChatService.__init__ must declare llm_client as AbstractLLMPort.
 
         Uses typing.get_type_hints() to resolve string annotations produced by
         ``from __future__ import annotations`` (PEP 563).
+
+        The service depends on AbstractLLMPort (the domain's ABC) rather than
+        LLMClientProtocol, ensuring zero runtime imports of LangChain/litellm.
         """
         import inspect
         import typing
@@ -305,28 +325,28 @@ class TestChatServiceProtocolDependency:
         # Resolve string annotations (PEP 563) back to the actual type objects
         hints = typing.get_type_hints(
             ChatService.__init__,
-            localns={"LLMClientProtocol": LLMClientProtocol},
+            localns={"AbstractLLMPort": AbstractLLMPort},
         )
         resolved_annotation = hints.get("llm_client")
-        assert resolved_annotation is LLMClientProtocol, (
-            f"llm_client parameter should be typed as LLMClientProtocol, "
+        assert resolved_annotation is AbstractLLMPort, (
+            f"llm_client parameter should be typed as AbstractLLMPort, "
             f"got {resolved_annotation!r}"
         )
 
 
 # ---------------------------------------------------------------------------
-# ChatService.complete — delegates to llm_client.ainvoke
+# ChatService.complete — delegates to llm_client.invoke (AbstractLLMPort)
 # ---------------------------------------------------------------------------
 
 
 class TestChatServiceComplete:
-    """ChatService.complete must delegate to LLMClientProtocol.ainvoke."""
+    """ChatService.complete must delegate to AbstractLLMPort.invoke."""
 
     @pytest.mark.asyncio
     async def test_complete_returns_ai_message(self) -> None:
         expected = AIMessage(content="The answer is 42.")
         mock_llm = _make_mock_llm_client()
-        mock_llm.ainvoke = AsyncMock(return_value=expected)
+        mock_llm.invoke = AsyncMock(return_value=expected)
 
         service = ChatService(llm_client=mock_llm)
         result = await service.complete([HumanMessage(content="What is the answer?")])
@@ -335,7 +355,7 @@ class TestChatServiceComplete:
         assert result.content == "The answer is 42."
 
     @pytest.mark.asyncio
-    async def test_complete_calls_ainvoke_with_messages(self) -> None:
+    async def test_complete_calls_invoke_with_messages(self) -> None:
         mock_llm = _make_mock_llm_client()
         messages = [
             SystemMessage(content="Be concise."),
@@ -345,19 +365,19 @@ class TestChatServiceComplete:
         service = ChatService(llm_client=mock_llm)
         await service.complete(messages)
 
-        mock_llm.ainvoke.assert_awaited_once()
-        call_args = mock_llm.ainvoke.await_args
+        mock_llm.invoke.assert_awaited_once()
+        call_args = mock_llm.invoke.await_args
         assert call_args is not None
         passed_messages = call_args[0][0]
         assert len(passed_messages) == 2
 
     @pytest.mark.asyncio
-    async def test_complete_forwards_kwargs_to_ainvoke(self) -> None:
+    async def test_complete_forwards_kwargs_to_invoke(self) -> None:
         mock_llm = _make_mock_llm_client()
         service = ChatService(llm_client=mock_llm)
         await service.complete([HumanMessage(content="hi")], temperature=0.1, max_tokens=100)
 
-        call_kwargs = mock_llm.ainvoke.await_args[1]
+        call_kwargs = mock_llm.invoke.await_args[1]
         assert call_kwargs.get("temperature") == 0.1
         assert call_kwargs.get("max_tokens") == 100
 
@@ -371,21 +391,21 @@ class TestChatServiceComplete:
 
 
 # ---------------------------------------------------------------------------
-# ChatService.stream — delegates to llm_client.astream
+# ChatService.stream — delegates to llm_client.stream (AbstractLLMPort)
 # ---------------------------------------------------------------------------
 
 
 class TestChatServiceStream:
-    """ChatService.stream must yield chunks from LLMClientProtocol.astream."""
+    """ChatService.stream must yield chunks from AbstractLLMPort.stream."""
 
     @pytest.mark.asyncio
     async def test_stream_yields_chunks_from_llm(self) -> None:
-        async def _astream(messages: Any, **kwargs: Any) -> AsyncIterator[str]:
+        async def _stream(messages: Any, **kwargs: Any) -> AsyncIterator[str]:
             for chunk in ["Hello", ", ", "world", "!"]:
                 yield chunk
 
-        mock_llm = MagicMock(spec=["ainvoke", "astream"])
-        mock_llm.astream = _astream
+        mock_llm = MagicMock(spec=["ainvoke", "astream", "invoke", "stream"])
+        mock_llm.stream = _stream
 
         service = ChatService(llm_client=mock_llm)
         collected: list[str] = []
@@ -415,12 +435,12 @@ class TestChatServiceStream:
     async def test_stream_empty_response(self) -> None:
         """Stream with no chunks from LLM yields nothing."""
 
-        async def _empty_astream(messages: Any, **kwargs: Any) -> AsyncIterator[str]:
+        async def _empty_stream(messages: Any, **kwargs: Any) -> AsyncIterator[str]:
             for _item in ():
                 yield str(_item)
 
-        mock_llm = MagicMock(spec=["ainvoke", "astream"])
-        mock_llm.astream = _empty_astream
+        mock_llm = MagicMock(spec=["ainvoke", "astream", "invoke", "stream"])
+        mock_llm.stream = _empty_stream
 
         service = ChatService(llm_client=mock_llm)
         collected: list[str] = []
@@ -430,15 +450,15 @@ class TestChatServiceStream:
         assert collected == []
 
     @pytest.mark.asyncio
-    async def test_stream_forwards_kwargs_to_astream(self) -> None:
+    async def test_stream_forwards_kwargs_to_stream(self) -> None:
         received_kwargs: dict[str, Any] = {}
 
-        async def _capturing_astream(messages: Any, **kwargs: Any) -> AsyncIterator[str]:
+        async def _capturing_stream(messages: Any, **kwargs: Any) -> AsyncIterator[str]:
             received_kwargs.update(kwargs)
             yield "chunk"
 
-        mock_llm = MagicMock(spec=["ainvoke", "astream"])
-        mock_llm.astream = _capturing_astream
+        mock_llm = MagicMock(spec=["ainvoke", "astream", "invoke", "stream"])
+        mock_llm.stream = _capturing_stream
 
         service = ChatService(llm_client=mock_llm)
         async for _ in service.stream([HumanMessage(content="test")], stop=["<END>"]):
@@ -465,7 +485,7 @@ class TestChatServiceDomainIsolation:
         # LLMClient (concrete class) must NOT be in the service module namespace
         assert "LLMClient" not in module_vars, (
             "ChatService module imported concrete LLMClient — "
-            "it should depend only on LLMClientProtocol from ports.py"
+            "it should depend only on AbstractLLMPort from ports.py"
         )
 
     def test_service_module_does_not_import_langchain_litellm(self) -> None:
@@ -487,3 +507,35 @@ class TestChatServiceDomainIsolation:
             "ChatService module references ProviderFactory — a domain service "
             "must not import infrastructure routing classes"
         )
+
+    def test_service_module_has_no_runtime_langchain_imports(self) -> None:
+        """The service module must not have langchain types in its runtime namespace.
+
+        LangChain types (BaseMessage, AIMessage) must only appear in the
+        TYPE_CHECKING block — never as runtime module-level names.  This
+        enforces zero provider imports at service runtime.
+        """
+        import {{ cookiecutter.package_name }}.domains.chat.service as service_module
+
+        module_vars = vars(service_module)
+        # These must be absent from the runtime namespace (TYPE_CHECKING only)
+        assert "BaseMessage" not in module_vars, (
+            "BaseMessage (LangChain type) found in service module runtime namespace — "
+            "it must only appear in TYPE_CHECKING block"
+        )
+        assert "AIMessage" not in module_vars, (
+            "AIMessage (LangChain type) found in service module runtime namespace — "
+            "it must only appear in TYPE_CHECKING block"
+        )
+
+    def test_service_module_references_abstract_llm_port(self) -> None:
+        """The service module must reference AbstractLLMPort (not LLMClientProtocol)."""
+        import {{ cookiecutter.package_name }}.domains.chat.service as service_module
+        from {{ cookiecutter.package_name }}.domains.chat.ports import AbstractLLMPort
+
+        module_vars = vars(service_module)
+        assert "AbstractLLMPort" in module_vars, (
+            "AbstractLLMPort must be importable from service module — "
+            "it is the domain port that ChatService depends on"
+        )
+        assert module_vars["AbstractLLMPort"] is AbstractLLMPort

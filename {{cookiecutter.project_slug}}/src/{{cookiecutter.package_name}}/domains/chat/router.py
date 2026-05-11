@@ -27,7 +27,7 @@ FastAPI dependency chain
         → get_chat_service(factory=get_llm_factory())
             → ChatService(llm_client=factory.get_llm_client())
                 → ChatService.complete() / ChatService.stream()
-                    → LLMClientProtocol.ainvoke() / .astream()
+                    → AbstractLLMPort.invoke() / .stream()
 
 Provider switching is transparent because the dependency chain reads from
 :func:`get_settings` on every request — changing ``LLM_PROVIDER`` in ``.env``

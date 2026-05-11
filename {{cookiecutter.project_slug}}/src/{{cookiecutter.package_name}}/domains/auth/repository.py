@@ -22,7 +22,9 @@ from sqlalchemy.orm import selectinload
 
 from {{ cookiecutter.package_name }}.domains.auth.models import (
     EmailVerification,
+{% if cookiecutter.oauth_providers != "none" %}
     OAuthAccount,
+{% endif %}
     PasswordReset,
     RefreshToken,
     Role,
@@ -202,6 +204,7 @@ class AuthRepository:
             update(PasswordReset).where(PasswordReset.id == pr_id).values(used=True)
         )
 
+{% if cookiecutter.oauth_providers != "none" %}
     # ── OAuthAccount ─────────────────────────────────────────────────────────
 
     async def get_oauth_account(
@@ -255,3 +258,4 @@ class AuthRepository:
                 expires_at=expires_at,
             )
         )
+{% endif %}

@@ -78,7 +78,7 @@ def _make_client(
     """
     settings = _make_llm_settings(provider, model)
     with patch(
-        "{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM"
+        "{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM"
     ) as MockChatLiteLLM:
         mock_instance = mock_chat or MagicMock()
         MockChatLiteLLM.return_value = mock_instance
@@ -95,12 +95,12 @@ class TestLLMClientConstructor:
     """LLMClient must wire ChatLiteLLM with correct kwargs from ProviderFactory."""
 
     def test_model_string_openai(self) -> None:
-        with patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM"):
+        with patch("{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM"):
             client = LLMClient(settings=_make_llm_settings("openai", "gpt-4o"))
         assert client.model_string == "openai/gpt-4o"
 
     def test_model_string_anthropic(self) -> None:
-        with patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM"):
+        with patch("{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM"):
             client = LLMClient(
                 settings=_make_llm_settings(
                     "anthropic",
@@ -112,7 +112,7 @@ class TestLLMClientConstructor:
         assert client.model_string == "anthropic/claude-3-5-sonnet-20241022"
 
     def test_model_string_gemini(self) -> None:
-        with patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM"):
+        with patch("{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM"):
             client = LLMClient(
                 settings=_make_llm_settings(
                     "gemini",
@@ -124,7 +124,7 @@ class TestLLMClientConstructor:
         assert client.model_string == "gemini/gemini-1.5-flash"
 
     def test_model_string_ollama(self) -> None:
-        with patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM"):
+        with patch("{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM"):
             client = LLMClient(
                 settings=_make_llm_settings(
                     "ollama",
@@ -136,7 +136,7 @@ class TestLLMClientConstructor:
         assert client.model_string == "ollama/llama3.2"
 
     def test_model_string_azure_with_deployment(self) -> None:
-        with patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM"):
+        with patch("{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM"):
             client = LLMClient(
                 settings=_make_llm_settings(
                     "azure",
@@ -150,12 +150,12 @@ class TestLLMClientConstructor:
         assert client.model_string == "azure/prod-gpt4o"
 
     def test_provider_property(self) -> None:
-        with patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM"):
+        with patch("{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM"):
             client = LLMClient(settings=_make_llm_settings("openai", "gpt-4o"))
         assert client.provider == "openai"
 
     def test_provider_property_anthropic(self) -> None:
-        with patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM"):
+        with patch("{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM"):
             client = LLMClient(
                 settings=_make_llm_settings(
                     "anthropic",
@@ -169,7 +169,7 @@ class TestLLMClientConstructor:
     def test_chat_property_returns_chat_litellm_instance(self) -> None:
         mock_chat_instance = MagicMock()
         with patch(
-            "{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM",
+            "{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM",
             return_value=mock_chat_instance,
         ):
             client = LLMClient(settings=_make_llm_settings("openai", "gpt-4o"))
@@ -183,7 +183,7 @@ class TestLLMClientConstructor:
             return MagicMock()
 
         with patch(
-            "{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM",
+            "{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM",
             side_effect=_capture,
         ):
             LLMClient(
@@ -204,7 +204,7 @@ class TestLLMClientConstructor:
             return MagicMock()
 
         with patch(
-            "{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM",
+            "{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM",
             side_effect=_capture,
         ):
             LLMClient(
@@ -221,10 +221,12 @@ class TestLLMClientConstructor:
         with (
             patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.LLMSettings") as MockLLMSettings,
             patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.ProviderFactory") as MockFactory,
-            patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM"),
+            patch("{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM"),
         ):
             mock_settings = MagicMock()
             mock_settings.provider.value = "openai"
+            # as_litellm_kwargs must return a real dict so ChatLiteLLM(**kwargs) works
+            mock_settings.as_litellm_kwargs.return_value = {"model": "openai/gpt-4o-mini"}
             MockLLMSettings.return_value = mock_settings
             MockFactory.make_kwargs.return_value = {"model": "openai/gpt-4o-mini"}
 
@@ -462,7 +464,7 @@ class TestGetLlmClient:
     def test_returns_llm_client_instance(self) -> None:
         with (
             patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.get_settings") as mock_get_settings,
-            patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM"),
+            patch("{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM"),
         ):
             mock_settings = MagicMock()
             mock_llm_settings = _make_llm_settings("openai", "gpt-4o-mini")
@@ -477,7 +479,7 @@ class TestGetLlmClient:
         """Ensure get_llm_client uses settings.llm, not raw environment vars."""
         with (
             patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.get_settings") as mock_get_settings,
-            patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM"),
+            patch("{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM"),
         ):
             mock_settings = MagicMock()
             mock_llm_settings = _make_llm_settings("anthropic", "claude-3-5-haiku-20241022",
@@ -493,7 +495,7 @@ class TestGetLlmClient:
     def test_factory_calls_get_settings(self) -> None:
         with (
             patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.get_settings") as mock_get_settings,
-            patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM"),
+            patch("{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM"),
         ):
             mock_settings = MagicMock()
             mock_settings.llm = _make_llm_settings("openai", "gpt-4o-mini")
@@ -544,7 +546,7 @@ class TestProviderPortability:
         elif provider == "azure":
             extra = {"openai_api_key": "", "azure_api_key": "az-key"}
 
-        with patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM"):
+        with patch("{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM"):
             client = LLMClient(settings=_make_llm_settings(provider, model, **extra))
 
         assert client.model_string == expected_model_string
@@ -566,7 +568,7 @@ class TestProviderPortability:
             elif provider == "gemini":
                 extra["gemini_api_key"] = "AIza"
 
-            with patch("{{ cookiecutter.package_name }}.domains.chat.llm_client.ChatLiteLLM"):
+            with patch("{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM"):
                 client = LLMClient(settings=_make_llm_settings(provider, model, **extra))
 
             assert client.model_string.startswith(f"{provider}/"), (

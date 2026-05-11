@@ -1,0 +1,235 @@
+# ============================================================
+# {{ cookiecutter.project_name }} — Justfile
+# ============================================================
+# Usage:
+#   just dev                → Bootstrap: install deps + start infra + FastAPI hot-reload
+#   just serve              → Run FastAPI hot-reload without re-running infra or migrations
+#   just infra              → Start infra containers and wait until all healthy (60 s)
+#   just infra-down         → Stop and remove infra containers
+#   just test               → Run full pytest suite
+#   just lint               → ruff check + mypy
+#   just format             → ruff format + ruff check --fix
+#   just migrate            → Apply pending Alembic migrations
+#   just revision MSG=""    → Create a new Alembic autogenerate revision
+#   just install            → uv sync (install all deps incl. dev)
+#   just clean              → Remove build/cache artifacts
+#
+# Pre-requisites:
+#   - just  (https://github.com/casey/just)
+#   - uv    (https://docs.astral.sh/uv/)
+#   - Docker + docker-compose (for infra services)
+# ============================================================
+
+# ── Variables ─────────────────────────────────────────────────────────────────
+project           := "{{ cookiecutter.project_slug }}"
+package           := "{{ cookiecutter.package_name }}"
+src_dir           := "src/" + package
+test_dir          := "tests"
+host              := "{{ cookiecutter.fastapi_host }}"
+port              := "{{ cookiecutter.fastapi_port }}"
+# User-facing display host — 0.0.0.0 binds all interfaces; browsers need localhost
+display_host      := if host == "0.0.0.0" { "localhost" } else { host }
+postgres_port     := "{{ cookiecutter.postgres_port }}"
+redis_port        := "{{ cookiecutter.redis_port }}"
+mailpit_smtp_port := "{{ cookiecutter.mailpit_smtp_port }}"
+mailpit_ui_port   := "{{ cookiecutter.mailpit_ui_port }}"
+compose_file      := "docker-compose.yml"
+infra_timeout     := "60"
+
+# ── Default recipe ────────────────────────────────────────────────────────────
+[private]
+default:
+    @just --list
+
+# ── Setup ─────────────────────────────────────────────────────────────────────
+# Install all dependencies (including dev) via uv; copy .env if missing
+install:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ ! -f .env ]; then
+        cp .env.example .env
+        echo "📋  .env created from .env.example — edit SECRET_KEY and JWT_SECRET_KEY before production."
+    fi
+    uv sync
+    {% if cookiecutter.use_pre_commit == "yes" -%}
+    uv run pre-commit install
+    echo "✅  pre-commit hooks installed (ruff + mypy run on staged files)."
+    {%- endif %}
+    echo "✅  Dependencies installed. Run 'just dev' to start the full stack."
+
+# ── Infrastructure ────────────────────────────────────────────────────────────
+# Start infrastructure containers (docker compose up -d) and wait for healthy status
+infra timeout=infra_timeout:
+    COMPOSE_FILE={{ '{{' }}compose_file{{ '}}' }} bash scripts/wait_for_services.sh {{ '{{' }}timeout{{ '}}' }}
+
+# Poll all containers until healthy (alias for CI/bootstrap validation)
+infra-health timeout=infra_timeout:
+    COMPOSE_FILE={{ '{{' }}compose_file{{ '}}' }} bash scripts/wait_for_services.sh {{ '{{' }}timeout{{ '}}' }}
+
+# Stop and remove infrastructure containers
+infra-down:
+    docker compose -f {{ '{{' }}compose_file{{ '}}' }} down
+
+# Follow docker-compose logs
+infra-logs:
+    docker compose -f {{ '{{' }}compose_file{{ '}}' }} logs -f
+
+# ── Dev server ────────────────────────────────────────────────────────────────
+# Bootstrap: install deps + start infra + apply migrations + FastAPI hot-reload
+dev: install infra migrate
+    @echo ""
+    @echo "🚀  Starting FastAPI at http://{{ '{{' }}display_host{{ '}}' }}:{{ '{{' }}port{{ '}}' }}"
+    @echo "     Docs       : http://{{ '{{' }}display_host{{ '}}' }}:{{ '{{' }}port{{ '}}' }}/docs"
+    @echo "     ReDoc      : http://{{ '{{' }}display_host{{ '}}' }}:{{ '{{' }}port{{ '}}' }}/redoc"
+    @echo "     Health     : http://{{ '{{' }}display_host{{ '}}' }}:{{ '{{' }}port{{ '}}' }}/health"
+    @echo "     Mailpit    : http://localhost:{{ '{{' }}mailpit_ui_port{{ '}}' }}"
+    @echo ""
+    uv run uvicorn {{ '{{' }}package{{ '}}' }}.main:app \
+        --host {{ '{{' }}host{{ '}}' }} \
+        --port {{ '{{' }}port{{ '}}' }} \
+        --reload \
+        --reload-dir {{ '{{' }}src_dir{{ '}}' }} \
+        --log-level info
+
+# Re-start dev server only (infra + deps already running — no install/migrate)
+serve:
+    @echo "🚀  Starting FastAPI at http://{{ '{{' }}display_host{{ '}}' }}:{{ '{{' }}port{{ '}}' }} (no infra/migrate step)"
+    uv run uvicorn {{ '{{' }}package{{ '}}' }}.main:app \
+        --host {{ '{{' }}host{{ '}}' }} \
+        --port {{ '{{' }}port{{ '}}' }} \
+        --reload \
+        --reload-dir {{ '{{' }}src_dir{{ '}}' }} \
+        --log-level info
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+# Run all tests with coverage
+test:
+    uv run pytest {{ '{{' }}test_dir{{ '}}' }} -v
+
+# Run only unit tests (no I/O)
+test-unit:
+    uv run pytest {{ '{{' }}test_dir{{ '}}' }} -v -m unit
+
+# Run only integration tests (requires running infra)
+test-integration:
+    uv run pytest {{ '{{' }}test_dir{{ '}}' }} -v -m integration
+
+# Run tests and open HTML coverage report
+test-cov:
+    uv run pytest {{ '{{' }}test_dir{{ '}}' }} --cov={{ '{{' }}src_dir{{ '}}' }} --cov-report=html
+    open htmlcov/index.html 2>/dev/null || xdg-open htmlcov/index.html 2>/dev/null || true
+
+# Run tests without coverage (faster feedback loop)
+test-fast:
+    uv run pytest {{ '{{' }}test_dir{{ '}}' }} -v --no-cov
+
+# ── Code quality ──────────────────────────────────────────────────────────────
+# Run ruff linter + mypy type checker
+lint:
+    @echo "── ruff check ──────────────────────────────"
+    uv run ruff check {{ '{{' }}src_dir{{ '}}' }} {{ '{{' }}test_dir{{ '}}' }}
+    @echo "── mypy ────────────────────────────────────"
+    uv run mypy {{ '{{' }}src_dir{{ '}}' }}
+
+# Auto-format code (ruff format + ruff check --fix)
+format:
+    @echo "── ruff format ─────────────────────────────"
+    uv run ruff format {{ '{{' }}src_dir{{ '}}' }} {{ '{{' }}test_dir{{ '}}' }}
+    @echo "── ruff check --fix ────────────────────────"
+    uv run ruff check --fix {{ '{{' }}src_dir{{ '}}' }} {{ '{{' }}test_dir{{ '}}' }}
+
+# Run mypy only
+typecheck:
+    uv run mypy {{ '{{' }}src_dir{{ '}}' }}
+
+# ── Alembic migrations ────────────────────────────────────────────────────────
+# Apply all pending Alembic migrations (upgrade head)
+migrate:
+    uv run alembic upgrade head
+
+# Create a new autogenerate Alembic revision (just revision "my message")
+revision msg="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -z "{{ '{{' }}msg{{ '}}' }}" ]; then
+        read -rp "Migration message: " msg
+    else
+        msg="{{ '{{' }}msg{{ '}}' }}"
+    fi
+    uv run alembic revision --autogenerate -m "$msg"
+
+# Downgrade one migration step
+downgrade:
+    uv run alembic downgrade -1
+
+# Show migration history
+migration-history:
+    uv run alembic history --verbose
+
+# Show current migration version
+migration-current:
+    uv run alembic current
+
+{% if cookiecutter.use_pre_commit == "yes" %}
+# ── Pre-commit ────────────────────────────────────────────────────────────────
+# Install git pre-commit hooks (ruff + mypy on staged files)
+pre-commit-install:
+    uv run pre-commit install
+    @echo "✅  Pre-commit installed: ruff runs on staged files, mypy on src/ when src changes."
+
+# Run all pre-commit hooks on every file (CI / one-off audit)
+pre-commit-run:
+    uv run pre-commit run --all-files
+
+# Update all pre-commit hook revisions to latest
+pre-commit-update:
+    uv run pre-commit autoupdate
+
+# Regenerate .secrets.baseline (detect-secrets full scan)
+secrets-baseline:
+    uv run detect-secrets scan \
+        --exclude-files '\.env\.example' \
+        --exclude-files '\.secrets\.baseline' \
+        > .secrets.baseline
+    @echo "✅  .secrets.baseline updated — review changes with: git diff .secrets.baseline"
+{% endif %}
+
+# ── Clean ─────────────────────────────────────────────────────────────────────
+# Remove Python cache, build artifacts, and test reports
+clean:
+    find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+    find . -type f -name "*.pyc" -delete 2>/dev/null || true
+    find . -type f -name "*.pyo" -delete 2>/dev/null || true
+    find . -type f -name ".coverage" -delete 2>/dev/null || true
+    rm -rf .pytest_cache .mypy_cache .ruff_cache htmlcov dist build *.egg-info
+
+# Remove docker volumes (⚠️  destroys local DB data)
+clean-docker:
+    docker compose -f {{ '{{' }}compose_file{{ '}}' }} down -v --remove-orphans
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+# Open an interactive Python shell with app context
+shell:
+    uv run python -c "from {{ '{{' }}package{{ '}}' }}.core.config import settings; print('Settings loaded:', settings.app_env)"
+
+# Print all registered API routes
+routes:
+    uv run python -c "from {{ '{{' }}package{{ '}}' }}.main import app; [print(r.path, r.methods) for r in app.routes]"
+
+# Check health endpoint
+health:
+    @curl -sf http://{{ '{{' }}display_host{{ '}}' }}:{{ '{{' }}port{{ '}}' }}/health | python3 -m json.tool || \
+        echo "❌  Server not responding at http://{{ '{{' }}display_host{{ '}}' }}:{{ '{{' }}port{{ '}}' }}/health"
+
+# ── Smoke tests ───────────────────────────────────────────────────────────────
+# Run API smoke tests (requires running server + infra)
+smoke-test:
+    uv run python scripts/smoke_test.py --host {{ '{{' }}host{{ '}}' }} --port {{ '{{' }}port{{ '}}' }}
+
+# Run smoke tests, skip chat/LLM steps (no LLM API key needed)
+smoke-test-no-chat:
+    uv run python scripts/smoke_test.py --host {{ '{{' }}host{{ '}}' }} --port {{ '{{' }}port{{ '}}' }} --skip-chat
+
+# Run smoke tests, skip email verification step
+smoke-test-skip-verify:
+    uv run python scripts/smoke_test.py --host {{ '{{' }}host{{ '}}' }} --port {{ '{{' }}port{{ '}}' }} --skip-email-verify

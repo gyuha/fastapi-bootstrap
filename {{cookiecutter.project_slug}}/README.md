@@ -17,7 +17,8 @@
 ```bash
 # 필수 도구: Docker Desktop + uv (없다면 아래 사전 요구사항 섹션 참조)
 
-make dev
+make dev   # Makefile 사용 시
+just dev   # Justfile 사용 시 (just 설치 필요: https://github.com/casey/just)
 ```
 
 내부 동작 순서:
@@ -55,6 +56,7 @@ curl http://localhost:{{ cookiecutter.fastapi_port }}/health
 - [코드 품질 도구](#코드-품질-도구)
 - [DB 마이그레이션](#db-마이그레이션)
 - [로깅](#로깅)
+- [Docker 배포 모드 요약](#docker-배포-모드-요약)
 
 ---
 
@@ -309,10 +311,11 @@ graph LR
 ### 원클릭 부팅 (권장)
 
 ```bash
-make dev
+make dev   # Makefile (make 기반)
+just dev   # Justfile (just 기반, 동일한 동작)
 ```
 
-> `make dev`는 아래 5단계를 **자동으로** 순서대로 실행합니다.
+> `make dev` / `just dev`는 아래 5단계를 **자동으로** 순서대로 실행합니다.
 
 ### 단계별 부팅 (수동)
 
@@ -386,19 +389,77 @@ curl http://localhost:{{ cookiecutter.fastapi_port }}/health
 
 > **주의**: 이 모드에서 `app` 컨테이너는 postgres/redis/mailpit 서비스명으로 통신합니다 (`localhost` 대신). `.env` 파일의 `DATABASE_URL`/`REDIS_URL`을 직접 지정한 경우 compose.yml의 `environment` 섹션이 덮어씁니다.
 
-### Makefile 주요 명령어
+### Production 모드 (`--profile prod`)
+
+`docker-compose.prod.yml` 오버레이를 사용하면 프로덕션 환경을 구성할 수 있습니다.
+
+**특징**:
+- `restart: always` — 장애 시 자동 재시작
+- `env_file: .env.prod` — 시크릿 파일 분리 (`.env`와 별도)
+- `volumes: []` — dev 전용 소스코드 볼륨 마운트 없음
+- Mailpit 제외 — 실제 SMTP 서버 사용
+- multi-stage Dockerfile `--target runtime` 적용
 
 ```bash
-make help               # 전체 명령어 목록
-make dev                # 풀 부트스트랩 (권장)
-make serve              # 서버만 재시작 (infra 이미 실행 중일 때)
-make infra              # docker-compose up -d (infra only, healthy 대기)
-make infra-down         # docker-compose down
-make migrate            # alembic upgrade head
-make test               # pytest (전체)
-make lint               # ruff check + mypy
-make format             # ruff format + ruff check --fix
-make clean              # 빌드 캐시 정리
+# 1. 프로덕션 환경변수 파일 생성
+cp .env.prod.example .env.prod
+# 시크릿 생성 및 SMTP/DB 자격증명 입력
+openssl rand -hex 32   # → SECRET_KEY
+openssl rand -hex 32   # → JWT_SECRET_KEY
+
+# 2. (최초 배포) 마이그레이션 실행
+make prod-migrate
+
+# 3. 프로덕션 스택 기동 (postgres + redis + app)
+make prod-up
+
+# 4. 헬스체크
+make prod-health
+# → {"status": "ok", "env": "production"}
+
+# 이미지 단독 빌드
+make prod-build
+
+# 로그 확인
+make prod-logs
+
+# 스택 종료
+make prod-down
+```
+
+> **보안 주의사항**:
+> - `.env.prod`는 절대 버전 관리에 포함하지 마세요 (`.gitignore`에 자동 추가됨)
+> - `SECRET_KEY`와 `JWT_SECRET_KEY`는 반드시 별개의 강력한 랜덤 값을 사용하세요
+> - `APP_ENV=production`, `APP_DEBUG=false`는 오버레이에서 자동 설정됩니다
+
+### Makefile / Justfile 주요 명령어
+
+두 가지 태스크 러너를 모두 지원합니다. `make <target>` 과 `just <recipe>` 는 동일하게 동작합니다.
+
+```bash
+# 전체 명령어 목록
+make help               # Makefile 사용 시
+just                    # Justfile 사용 시 (just --list)
+
+# 개발
+make dev / just dev         # 풀 부트스트랩 (권장) ← install + infra + migrate + uvicorn
+make serve / just serve     # 서버만 재시작 (infra 이미 실행 중일 때)
+make infra / just infra     # docker-compose up -d (infra only, healthy 대기)
+make infra-down / just infra-down   # docker-compose down
+make migrate / just migrate         # alembic upgrade head
+
+# 테스트 & 품질
+make test / just test       # pytest (전체)
+make lint / just lint       # ruff check + mypy
+make format / just format   # ruff format + ruff check --fix
+make clean / just clean     # 빌드 캐시 정리
+
+# 프로덕션 (Makefile 전용)
+make prod-up            # 프로덕션 스택 기동 (postgres + redis + app)
+make prod-down          # 프로덕션 스택 종료
+make prod-logs          # 프로덕션 로그 스트리밍
+make prod-build         # 프로덕션 이미지 빌드 (--target runtime)
+make prod-migrate       # 프로덕션 컨테이너에서 Alembic 마이그레이션 실행
 ```
 
 ---
@@ -605,7 +666,8 @@ JWT_SECRET_KEY=<openssl rand -hex 32>   # SECRET_KEY와 다른 값 사용
 ├── .env.example                                  # 환경변수 템플릿
 ├── alembic.ini                                   # Alembic 설정
 ├── pyproject.toml                                # 프로젝트 메타데이터 + 도구 설정
-├── Makefile                                      # 개발 편의 명령어
+├── Makefile                                      # 개발 편의 명령어 (make dev 등)
+├── Justfile                                      # just 기반 동등 레시피 (just dev 등)
 {% if cookiecutter.use_pre_commit == "yes" %}
 └── .pre-commit-config.yaml                       # pre-commit 훅 (ruff + mypy)
 {% endif %}

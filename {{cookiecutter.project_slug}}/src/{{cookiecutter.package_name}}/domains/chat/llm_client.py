@@ -59,16 +59,19 @@ Usage::
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
-from typing import Any
+from collections.abc import AsyncGenerator, AsyncIterator
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from langchain_core.messages import BaseMessage
 from langchain_core.messages.ai import AIMessage
-from langchain_litellm import ChatLiteLLM
 
 from {{ cookiecutter.package_name }}.core.config import LLMSettings, get_settings
 from {{ cookiecutter.package_name }}.domains.chat.llm_factory import ProviderFactory
+from {{ cookiecutter.package_name }}.infra.llm.provider_factory import make_chat_litellm
+
+if TYPE_CHECKING:
+    from langchain_litellm import ChatLiteLLM
 
 logger = structlog.get_logger(__name__)
 
@@ -117,12 +120,18 @@ class LLMClient:
         **override_kwargs: Any,
     ) -> None:
         resolved: LLMSettings = settings or LLMSettings()
+        # Compute base kwargs for model_string / provider metadata extraction.
+        # ProviderFactory.make_kwargs delegates to resolved.as_litellm_kwargs().
         base_kwargs: dict[str, Any] = ProviderFactory.make_kwargs(resolved)
         base_kwargs.update(override_kwargs)
 
         self._model_string: str = str(base_kwargs["model"])
         self._provider: str = resolved.provider.value
-        self._chat: ChatLiteLLM = ChatLiteLLM(**base_kwargs)
+        # Delegate ChatLiteLLM instantiation to the infra layer adapter.
+        # Tests should patch
+        # ``{{ cookiecutter.package_name }}.infra.llm.provider_factory.ChatLiteLLM``
+        # to intercept construction without network calls.
+        self._chat: ChatLiteLLM = make_chat_litellm(resolved, **override_kwargs)
 
         logger.debug(
             "llm_client_initialized",
@@ -241,6 +250,63 @@ class LLMClient:
             model=self._model_string,
             chunks=chunk_count,
         )
+
+    # ------------------------------------------------------------------
+    # AbstractLLMPort bridge methods
+    # ------------------------------------------------------------------
+
+    async def invoke(
+        self,
+        messages: list[BaseMessage],
+        **kwargs: Any,
+    ) -> AIMessage:
+        """Bridge to :meth:`ainvoke` — satisfies :class:`AbstractLLMPort` contract.
+
+        This method delegates directly to :meth:`ainvoke` so that
+        :class:`LLMClient` satisfies both :class:`LLMClientProtocol`
+        (``ainvoke`` / ``astream``) and :class:`AbstractLLMPort`
+        (``invoke`` / ``stream``).
+
+        Parameters
+        ----------
+        messages:
+            Ordered list of LangChain :class:`BaseMessage` instances.
+        **kwargs:
+            Provider-specific options forwarded to :meth:`ainvoke`.
+
+        Returns
+        -------
+        AIMessage
+            The model's complete response.
+        """
+        return await self.ainvoke(messages, **kwargs)
+
+    async def stream(
+        self,
+        messages: list[BaseMessage],
+        **kwargs: Any,
+    ) -> AsyncIterator[str]:
+        """Bridge to :meth:`astream` — satisfies :class:`AbstractLLMPort` contract.
+
+        This method delegates directly to :meth:`astream` so that
+        :class:`LLMClient` satisfies both :class:`LLMClientProtocol`
+        (``ainvoke`` / ``astream``) and :class:`AbstractLLMPort`
+        (``invoke`` / ``stream``).
+
+        Parameters
+        ----------
+        messages:
+            Ordered list of LangChain :class:`BaseMessage` instances.
+        **kwargs:
+            Provider-specific options forwarded to :meth:`astream`.
+
+        Yields
+        ------
+        str
+            Non-empty text chunks as they arrive from the provider.
+        """
+        async for chunk in self.astream(messages, **kwargs):
+            yield chunk
 
 
 # ---------------------------------------------------------------------------

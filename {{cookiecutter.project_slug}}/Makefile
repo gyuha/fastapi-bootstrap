@@ -22,12 +22,18 @@
 SHELL       := /bin/bash
 .DEFAULT_GOAL := help
 
-PROJECT     := {{ cookiecutter.project_slug }}
-PACKAGE     := {{ cookiecutter.package_name }}
-SRC_DIR     := src/$(PACKAGE)
-TEST_DIR    := tests
-HOST        := {{ cookiecutter.fastapi_host }}
-PORT        := {{ cookiecutter.fastapi_port }}
+PROJECT          := {{ cookiecutter.project_slug }}
+PACKAGE          := {{ cookiecutter.package_name }}
+SRC_DIR          := src/$(PACKAGE)
+TEST_DIR         := tests
+HOST             := {{ cookiecutter.fastapi_host }}
+PORT             := {{ cookiecutter.fastapi_port }}
+# User-facing display host — 0.0.0.0 binds all interfaces; browsers need localhost
+DISPLAY_HOST     := $(if $(filter 0.0.0.0,$(HOST)),localhost,$(HOST))
+POSTGRES_PORT    := {{ cookiecutter.postgres_port }}
+REDIS_PORT       := {{ cookiecutter.redis_port }}
+MAILPIT_SMTP_PORT := {{ cookiecutter.mailpit_smtp_port }}
+MAILPIT_UI_PORT  := {{ cookiecutter.mailpit_ui_port }}
 
 # Compose file lives at project root
 COMPOSE     := docker compose
@@ -44,6 +50,7 @@ UVPYTHON    := uv run python
         migrate revision downgrade \
         smoke-test smoke-test-no-chat smoke-test-skip-verify \
         clean clean-docker \
+        prod-up prod-down prod-logs prod-build prod-migrate prod-health \
         {% if cookiecutter.use_pre_commit == "yes" %}pre-commit-install pre-commit-run pre-commit-update secrets-baseline{% endif %}
 
 # ── Help ──────────────────────────────────────────────────────────────────────
@@ -66,11 +73,11 @@ install: ## Install all dependencies (including dev) via uv; copy .env if missin
 	@echo "✅  Dependencies installed. Run 'make dev' to start the full stack."
 
 # ── Infrastructure ────────────────────────────────────────────────────────────
-infra: ## Start infrastructure containers and wait for healthy status (60s timeout)
-	@bash scripts/wait_for_services.sh $(INFRA_TIMEOUT)
+infra: ## Start infrastructure containers (docker compose up -d) and wait for healthy status
+	@COMPOSE_FILE=$(COMPOSE_FILE) bash scripts/wait_for_services.sh $(INFRA_TIMEOUT)
 
 infra-health: ## Poll all containers until healthy (alias for CI/bootstrap validation)
-	@bash scripts/wait_for_services.sh $(INFRA_TIMEOUT)
+	@COMPOSE_FILE=$(COMPOSE_FILE) bash scripts/wait_for_services.sh $(INFRA_TIMEOUT)
 
 infra-down: ## Stop and remove infrastructure containers
 	$(COMPOSE) -f $(COMPOSE_FILE) down
@@ -85,11 +92,11 @@ INFRA_TIMEOUT ?= 60
 # Full bootstrap: uv sync → docker compose up -d (healthy) → alembic upgrade → uvicorn --reload
 dev: install infra migrate ## Bootstrap: install deps + start infra + FastAPI hot-reload
 	@echo ""
-	@echo "🚀  Starting FastAPI at http://$(HOST):$(PORT)"
-	@echo "     Docs       : http://$(HOST):$(PORT)/docs"
-	@echo "     ReDoc      : http://$(HOST):$(PORT)/redoc"
-	@echo "     Health     : http://$(HOST):$(PORT)/health"
-	@echo "     Mailpit    : http://localhost:8025"
+	@echo "🚀  Starting FastAPI at http://$(DISPLAY_HOST):$(PORT)"
+	@echo "     Docs       : http://$(DISPLAY_HOST):$(PORT)/docs"
+	@echo "     ReDoc      : http://$(DISPLAY_HOST):$(PORT)/redoc"
+	@echo "     Health     : http://$(DISPLAY_HOST):$(PORT)/health"
+	@echo "     Mailpit    : http://localhost:$(MAILPIT_UI_PORT)"
 	@echo ""
 	$(UV) uvicorn $(PACKAGE).main:app \
 		--host $(HOST) \
@@ -100,7 +107,7 @@ dev: install infra migrate ## Bootstrap: install deps + start infra + FastAPI ho
 
 # Re-start dev server only (infra + deps already running — no install/migrate)
 serve: ## Run FastAPI hot-reload without re-running infra or migrations
-	@echo "🚀  Starting FastAPI at http://$(HOST):$(PORT) (no infra/migrate step)"
+	@echo "🚀  Starting FastAPI at http://$(DISPLAY_HOST):$(PORT) (no infra/migrate step)"
 	$(UV) uvicorn $(PACKAGE).main:app \
 		--host $(HOST) \
 		--port $(PORT) \
@@ -203,8 +210,8 @@ routes: ## Print all registered API routes
 	$(UVPYTHON) -c "from $(PACKAGE).main import app; [print(r.path, r.methods) for r in app.routes]"
 
 health: ## Check health endpoint
-	@curl -sf http://$(HOST):$(PORT)/health | python3 -m json.tool || \
-		echo "❌  Server not responding at http://$(HOST):$(PORT)/health"
+	@curl -sf http://$(DISPLAY_HOST):$(PORT)/health | python3 -m json.tool || \
+		echo "❌  Server not responding at http://$(DISPLAY_HOST):$(PORT)/health"
 
 # ── Smoke tests ───────────────────────────────────────────────────────────────
 smoke-test: ## Run API smoke tests (requires running server + infra)
@@ -215,3 +222,62 @@ smoke-test-no-chat: ## Run smoke tests, skip chat/LLM steps (no LLM API key need
 
 smoke-test-skip-verify: ## Run smoke tests, skip email verification step
 	$(UVPYTHON) scripts/smoke_test.py --host $(HOST) --port $(PORT) --skip-email-verify
+
+# ── Production (docker-compose.prod.yml overlay) ──────────────────────────────
+#
+#  필수 사전 작업:
+#    cp .env.prod.example .env.prod
+#    # 시크릿 생성
+#    openssl rand -hex 32   # → SECRET_KEY
+#    openssl rand -hex 32   # → JWT_SECRET_KEY
+#    # .env.prod에 DB 자격증명, SMTP, LLM API 키 등 입력
+#
+# 적용되는 프로덕션 설정 (docker-compose.prod.yml):
+#   • restart: always        — 장애 시 자동 재시작
+#   • env_file: .env.prod    — 프로덕션 시크릿 분리
+#   • volumes: []            — dev 전용 소스코드 마운트 제거
+#   • Dockerfile --target runtime — multi-stage 빌드 런타임 스테이지
+#   • mailpit 제외           — 실제 SMTP 사용
+# ─────────────────────────────────────────────────────────────────────────────
+PROD_COMPOSE_FILES := -f docker-compose.yml -f docker-compose.prod.yml
+PROD_PROFILE      := --profile prod
+PROD_COMPOSE      := $(COMPOSE) $(PROD_COMPOSE_FILES) $(PROD_PROFILE)
+
+prod-up: ## Start production stack (postgres + redis + app; no mailpit)
+	@if [ ! -f .env.prod ]; then \
+		echo "❌  .env.prod 파일이 없습니다."; \
+		echo "    cp .env.prod.example .env.prod"; \
+		echo "    # 그 후 SECRET_KEY, JWT_SECRET_KEY, DB 비밀번호, SMTP 설정 등을 채우세요."; \
+		exit 1; \
+	fi
+	$(PROD_COMPOSE) up -d --build
+	@echo ""
+	@echo "🚀  Production stack started."
+	@echo "     Health: http://$(DISPLAY_HOST):$(PORT)/health"
+	@echo "     Logs  : make prod-logs"
+
+prod-down: ## Stop and remove production containers
+	$(COMPOSE) $(PROD_COMPOSE_FILES) down
+
+prod-logs: ## Follow production service logs
+	$(COMPOSE) $(PROD_COMPOSE_FILES) logs -f
+
+prod-build: ## Build production Docker image only (--target runtime)
+	docker build \
+		--target runtime \
+		--tag $(PROJECT):prod \
+		--build-arg PYTHON_VERSION="{{ cookiecutter.python_version }}" \
+		.
+	@echo "✅  Image built: $(PROJECT):prod"
+	@docker images $(PROJECT):prod 2>/dev/null || true
+
+prod-migrate: ## Run Alembic migrations in production container
+	@if [ ! -f .env.prod ]; then \
+		echo "❌  .env.prod 파일이 없습니다. cp .env.prod.example .env.prod"; \
+		exit 1; \
+	fi
+	$(COMPOSE) $(PROD_COMPOSE_FILES) run --rm app alembic upgrade head
+
+prod-health: ## Check production app health endpoint
+	@curl -sf http://$(DISPLAY_HOST):$(PORT)/health | python3 -m json.tool || \
+		echo "❌  Production server not responding at http://$(DISPLAY_HOST):$(PORT)/health"

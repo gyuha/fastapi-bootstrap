@@ -493,11 +493,26 @@ validate_scenario() {
     echo ""
     echo "  $(_color "── 핵심 파일 내용 검사 ──" "1;33")"
 
-    # pyproject.toml 필수 의존성
+    # pyproject.toml 필수 의존성 (공통 — 모든 시나리오)
     local pyproject="${project_dir}/pyproject.toml"
-    for dep in "fastapi" "sqlalchemy" "alembic" "passlib" "argon2-cffi" "redis" "structlog" "sse-starlette"; do
+    for dep in "fastapi" "sqlalchemy" "alembic" "passlib" "argon2-cffi" "redis" "structlog"; do
         assert_contains "${pyproject}" "${dep}"
     done
+
+    # pyproject.toml — chat 도메인 활성화 시 LLM 의존성 검사
+    if [[ "${include_chat}" == "yes" ]]; then
+        echo ""
+        echo "  $(_color "── chat 도메인 LLM 의존성 (include_chat_domain=yes) ──" "1;33")"
+        for dep in "sse-starlette" "langchain" "langchain-litellm" "litellm"; do
+            assert_contains "${pyproject}" "${dep}"
+        done
+    else
+        echo ""
+        echo "  $(_color "── chat 도메인 LLM 의존성 미포함 검사 (include_chat_domain=no) ──" "1;33")"
+        for dep in "langchain" "langchain-litellm" "litellm" "sse-starlette"; do
+            assert_not_contains "${pyproject}" "${dep}"
+        done
+    fi
 
     # docker-compose.yml 필수 서비스
     local compose="${project_dir}/docker-compose.yml"
