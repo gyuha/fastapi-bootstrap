@@ -1,0 +1,112 @@
+# ============================================================
+# pre-commit hook configuration for FastAPI Bootstrap
+# ============================================================
+# Install:  make pre-commit-install   (or: uv run pre-commit install)
+# Run all:  make pre-commit-run       (or: uv run pre-commit run --all-files)
+#
+# All linter / formatter configs live in pyproject.toml ([tool.ruff],
+# [tool.mypy]).  Pre-commit just orchestrates the tool invocations.
+#
+# Staged-files-only design
+# ────────────────────────
+#   ruff-format / ruff
+#     pre-commit default passes ONLY staged file paths to the tool → fast,
+#     per-file, no redundant work.
+#
+#   mypy
+#     pass_filenames: false  →  mypy always receives "src/" as its target,
+#     giving it full package context and preventing false "module not found"
+#     errors caused by partial import graphs when only some files are staged.
+#
+#     files: ^src/           →  the hook TRIGGERS only when at least one
+#     file under src/ is staged.  Commits that touch only tests/, docs/, or
+#     config files skip mypy entirely.
+#
+# Net result: ruff and mypy both run on/because-of changed files only.
+# ============================================================
+
+default_language_version:
+  python: python3.12
+
+repos:
+  # ── General file hygiene ──────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-added-large-files
+        args: [--maxkb=1000]
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: debug-statements        # Catch forgotten breakpoint() / pdb
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: [--fix=lf]
+
+  # ── Ruff — linter + formatter (replaces flake8, isort, black) ────────────
+  # Runs on staged (changed) Python files only — fast, per-file invocation.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.0
+    hooks:
+      # Formatter — replaces black.
+      # Receives only staged .py / .pyi paths; reformats in-place.
+      - id: ruff-format
+        types_or: [python, pyi]
+
+      # Linter with auto-fix — replaces flake8 + isort + many plugins.
+      # --exit-non-zero-on-fix: exits 1 when it auto-fixes so the developer
+      # must `git add` the fixed files before committing again.
+      - id: ruff
+        types_or: [python, pyi]
+        args: [--fix, --exit-non-zero-on-fix]
+
+  # ── Mypy — static type checker ────────────────────────────────────────────
+  # Uses the project-local mypy installed by `uv sync` so it sees the exact
+  # same stubs and plugin configuration as pyproject.toml specifies.
+  #
+  # Key options
+  # -----------
+  #   pass_filenames: false  →  pre-commit does NOT pass individual file
+  #     paths to mypy; instead mypy receives only the args below ("src/").
+  #     This gives mypy the full package graph — critical for accurate cross-
+  #     module type inference.
+  #
+  #   files: ^src/           →  the hook is SKIPPED unless at least one
+  #     staged file lives under src/.  Commits touching only tests, alembic
+  #     migrations, or docs incur zero mypy overhead.
+  #
+  #   types: [python]        →  additional filter: only Python files count
+  #     when deciding whether to trigger the hook.
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (type-check src/)
+        language: system
+        entry: uv run mypy
+        args:
+          - src/
+          - --config-file=pyproject.toml
+        pass_filenames: false
+        types: [python]
+        files: ^src/
+
+  # ── Security — detect secrets ─────────────────────────────────────────────
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline]
+        exclude: .env.example
+
+  # ── Commit message linting ────────────────────────────────────────────────
+  # Enforces Conventional Commits format: feat(scope): description
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v3.30.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]

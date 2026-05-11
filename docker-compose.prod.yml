@@ -1,0 +1,132 @@
+# ============================================================
+# docker-compose.prod.yml — FastAPI Bootstrap
+# ============================================================
+# Production overlay — docker-compose.yml 위에 적용되는 prod 전용 설정
+#
+# ── 사용법 ────────────────────────────────────────────────────────────────────
+#   # (권장) Makefile 단축 명령
+#   make prod-up          # 프로덕션 스택 기동 (postgres + redis + app)
+#   make prod-down        # 프로덕션 스택 중지
+#   make prod-logs        # 프로덕션 로그 스트리밍
+#   make prod-build       # 프로덕션 이미지 단독 빌드
+#
+#   # 직접 실행
+#   docker compose \
+#     -f docker-compose.yml \
+#     -f docker-compose.prod.yml \
+#     --profile prod up -d
+#
+#   # 마이그레이션 실행 (최초 배포 또는 스키마 변경 시)
+#   docker compose \
+#     -f docker-compose.yml \
+#     -f docker-compose.prod.yml \
+#     --profile prod run --rm app \
+#     alembic upgrade head
+#
+# ── 사전 준비 ─────────────────────────────────────────────────────────────────
+#   1. .env.prod 생성
+#        cp .env.prod.example .env.prod
+#   2. 시크릿 생성
+#        openssl rand -hex 32   # → SECRET_KEY
+#        openssl rand -hex 32   # → JWT_SECRET_KEY  (SECRET_KEY와 달라야 함)
+#   3. .env.prod 편집
+#        - DB 자격증명 (POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB)
+#        - JWT 시크릿 (SECRET_KEY, JWT_SECRET_KEY)
+#        - SMTP 설정 (MAIL_SERVER, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD)
+#        - LLM API 키 (include_chat_domain=yes인 경우)
+#        - OAuth 시크릿 (사용하는 프로바이더만)
+#
+# ── 이 오버레이가 적용하는 변경 사항 ─────────────────────────────────────────
+#   ✓ restart: always         — 장애 시 자동 재시작 (dev의 unless-stopped 대체)
+#   ✓ env_file: .env.prod     — 프로덕션 시크릿 분리 (dev .env와 별도 파일)
+#   ✓ volumes: []             — dev 전용 소스코드 볼륨 마운트 제거
+#   ✓ APP_ENV: production     — 프로덕션 모드 강제
+#   ✓ APP_DEBUG: false        — 디버그 비활성화
+#   ✓ mailpit: dev-tools 프로파일 — 프로덕션에서 mailpit 미기동
+#   ✓ MAIL_SERVER/PORT: .env.prod 기반 실제 SMTP로 교체
+# ============================================================
+
+name: fastapi-bootstrap
+
+services:
+  # --------------------------------------------------------------------------
+  # PostgreSQL 16 — production restart policy
+  # --------------------------------------------------------------------------
+  postgres:
+    restart: always   # Override: always (vs unless-stopped in dev)
+
+  # --------------------------------------------------------------------------
+  # Redis 7 — production restart policy
+  # --------------------------------------------------------------------------
+  redis:
+    restart: always   # Override: always (vs unless-stopped in dev)
+
+  # --------------------------------------------------------------------------
+  # Mailpit — dev-only; 프로덕션에서는 기동하지 않음
+  # --------------------------------------------------------------------------
+  # 이 오버레이에서 mailpit을 'dev-tools' 프로파일로 제한하여
+  # --profile prod 실행 시 자동으로 제외됩니다.
+  # 프로덕션에서는 .env.prod에 설정된 실제 SMTP 서버를 사용합니다.
+  mailpit:
+    profiles:
+      - dev-tools   # '--profile dev-tools'로만 기동; --profile prod에서는 제외
+
+  # --------------------------------------------------------------------------
+  # FastAPI Application — production-only container definition
+  # --------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime           # multi-stage Dockerfile — runtime 스테이지만 사용
+      args:
+        PYTHON_VERSION: "3.12"
+    profiles:
+      - prod                    # base docker-compose.yml에는 app 서비스가 없음
+    restart: always
+
+    # ── 환경변수 분리 ─────────────────────────────────────────────────────────
+    # .env.prod에서 반드시 설정해야 할 항목:
+    #   SECRET_KEY, JWT_SECRET_KEY, POSTGRES_PASSWORD,
+    #   FRONTEND_RESET_CONFIRM_URL_BASE,
+    #   MAIL_SERVER, MAIL_PORT, MAIL_USERNAME, MAIL_PASSWORD
+    #   (LLM API 키, OAuth 시크릿 — 해당하는 경우)
+    # ─────────────────────────────────────────────────────────────────────────
+    env_file:
+      - .env.prod
+
+    environment:
+      # 컨테이너 내부에서는 서비스명으로 통신 (localhost 불가)
+      POSTGRES_HOST: postgres
+      REDIS_HOST: redis
+      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@postgres:5432/${POSTGRES_DB:-fastapi_bootstrap_db}"
+      DATABASE_URL_SYNC: "postgresql+psycopg2://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@postgres:5432/${POSTGRES_DB:-fastapi_bootstrap_db}"
+      REDIS_URL: "redis://redis:6379/${REDIS_DB:-0}"
+
+      # ── 프로덕션 모드 강제 ──────────────────────────────────────────────────
+      APP_ENV: production
+      APP_DEBUG: "false"
+
+      # ── 실제 SMTP 서버로 교체 ───────────────────────────────────────────────
+      MAIL_SERVER: "${MAIL_SERVER:-smtp.fastapi-bootstrap.local}"
+      MAIL_PORT: "${MAIL_PORT:-587}"
+      MAIL_STARTTLS: "${MAIL_STARTTLS:-true}"
+      MAIL_SSL_TLS: "${MAIL_SSL_TLS:-false}"
+
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+    # ── dev 전용 볼륨 마운트 없음 ────────────────────────────────────────────
+    # 프로덕션 이미지는 /runtime-venv에 패키지를 휠로 사전 설치합니다.
+    volumes: []

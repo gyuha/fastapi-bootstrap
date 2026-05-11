@@ -1,0 +1,113 @@
+# ============================================================
+# docker-compose.yml — FastAPI Bootstrap
+# ============================================================
+#
+# ┌──────────────────────────────────────────────────────────┐
+# │  LOCAL DEV (권장 기본 모드)                               │
+# │  FastAPI는 HOST에서 uv run으로 실행 (hot-reload 지원)     │
+# │                                                          │
+# │  make dev                                                │
+# │   → docker compose up -d  (postgres + redis + mailpit)   │
+# │   → uv sync               (의존성 설치)                   │
+# │   → alembic upgrade head  (DB 마이그레이션)               │
+# │   → uvicorn --reload      (호스트에서 앱 기동)            │
+# │                                                          │
+# │  PRODUCTION  (--profile prod + prod overlay)            │
+# │  docker compose \                                        │
+# │    -f docker-compose.yml \                               │
+# │    -f docker-compose.prod.yml \                          │
+# │    --profile prod up -d                                  │
+# │   → postgres + redis + app (no mailpit)                  │
+# │   → app 서비스 정의는 docker-compose.prod.yml에만 존재    │
+# │                                                          │
+# │  이 base compose 파일은 local dev infra만 정의합니다.     │
+# └──────────────────────────────────────────────────────────┘
+#
+# 환경변수: .env 파일에서 로드 (cp .env.example .env)
+# 프로덕션:  .env.prod 파일에서 로드 (cp .env.prod.example .env.prod)
+# ============================================================
+
+name: fastapi-bootstrap
+
+services:
+  # --------------------------------------------------------------------------
+  # PostgreSQL 16
+  # --------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
+      POSTGRES_DB: ${POSTGRES_DB:-fastapi_bootstrap_db}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-fastapi_bootstrap_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # --------------------------------------------------------------------------
+  # Redis 7
+  # --------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    # Local-dev Redis metadata is explicit for compose diagnostics.
+    # Host-run FastAPI uses .env (localhost + mapped REDIS_PORT); containers use redis:6379.
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_DB: "${REDIS_DB:-0}"
+      REDIS_URL: "redis://redis:6379/${REDIS_DB:-0}"
+    ports:
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-h", "127.0.0.1", "-p", "6379", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  # --------------------------------------------------------------------------
+  # Mailpit — local SMTP server + web UI for email testing
+  # --------------------------------------------------------------------------
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"   # SMTP
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"       # Web UI
+    environment:
+      MP_MAX_MESSAGES: 500
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+      # Persist emails to SQLite so they survive container restarts (dev convenience)
+      MP_DATABASE: /data/mailpit.db
+    volumes:
+      - mailpit_data:/data
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+# --------------------------------------------------------------------------
+# Named volumes
+# --------------------------------------------------------------------------
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  mailpit_data:
+    driver: local
