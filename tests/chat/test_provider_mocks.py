@@ -66,9 +66,9 @@ from unittest.mock import MagicMock
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from fastapi_bootstrap.core.config import LLMProvider, LLMSettings, get_settings
-from fastapi_bootstrap.domains.chat.ports import LLMClientProtocol
-from fastapi_bootstrap.domains.chat.service import ChatService
+from core.config import LLMProvider, LLMSettings, get_settings
+from domains.chat.ports import LLMClientProtocol
+from domains.chat.service import ChatService
 
 from ._mocks import (
     FAKE_RESPONSE_TEXT,
@@ -357,7 +357,7 @@ class TestPatchedChatLiteLLM:
         patched_chat_litellm: MagicMock,
         openai_llm_settings: LLMSettings,
     ) -> None:
-        from fastapi_bootstrap.domains.chat.llm_client import LLMClient
+        from domains.chat.llm_client import LLMClient
 
         LLMClient(settings=openai_llm_settings)
         patched_chat_litellm.assert_called_once()
@@ -367,7 +367,7 @@ class TestPatchedChatLiteLLM:
         patched_chat_litellm: MagicMock,
         openai_llm_settings: LLMSettings,
     ) -> None:
-        from fastapi_bootstrap.domains.chat.llm_client import LLMClient
+        from domains.chat.llm_client import LLMClient
 
         LLMClient(settings=openai_llm_settings)
         _, call_kwargs = patched_chat_litellm.call_args
@@ -378,7 +378,7 @@ class TestPatchedChatLiteLLM:
         patched_chat_litellm: MagicMock,
         openai_llm_settings: LLMSettings,
     ) -> None:
-        from fastapi_bootstrap.domains.chat.llm_client import LLMClient
+        from domains.chat.llm_client import LLMClient
 
         LLMClient(settings=openai_llm_settings)
         _, call_kwargs = patched_chat_litellm.call_args
@@ -389,7 +389,7 @@ class TestPatchedChatLiteLLM:
         patched_chat_litellm: MagicMock,
         openai_llm_settings: LLMSettings,
     ) -> None:
-        from fastapi_bootstrap.domains.chat.llm_client import LLMClient
+        from domains.chat.llm_client import LLMClient
 
         LLMClient(settings=openai_llm_settings, temperature=0.3, max_tokens=256)
         _, call_kwargs = patched_chat_litellm.call_args
@@ -401,7 +401,7 @@ class TestPatchedChatLiteLLM:
         patched_chat_litellm: MagicMock,
         ollama_llm_settings: LLMSettings,
     ) -> None:
-        from fastapi_bootstrap.domains.chat.llm_client import LLMClient
+        from domains.chat.llm_client import LLMClient
 
         LLMClient(settings=ollama_llm_settings)
         _, call_kwargs = patched_chat_litellm.call_args
@@ -413,7 +413,7 @@ class TestPatchedChatLiteLLM:
         patched_chat_litellm: MagicMock,
         ollama_llm_settings: LLMSettings,
     ) -> None:
-        from fastapi_bootstrap.domains.chat.llm_client import LLMClient
+        from domains.chat.llm_client import LLMClient
 
         LLMClient(settings=ollama_llm_settings)
         _, call_kwargs = patched_chat_litellm.call_args
@@ -815,7 +815,7 @@ class TestProviderPortability:
         ollama_llm_settings: LLMSettings,
     ) -> None:
         """Different providers produce different model strings — no code changes needed."""
-        from fastapi_bootstrap.domains.chat.llm_factory import ProviderFactory
+        from domains.chat.llm_factory import ProviderFactory
 
         openai_model = ProviderFactory.from_settings(openai_llm_settings)
         ollama_model = ProviderFactory.from_settings(ollama_llm_settings)
@@ -879,7 +879,7 @@ class TestProviderPortability:
         ollama_llm_settings: LLMSettings,
     ) -> None:
         """Model string prefix always matches the configured provider."""
-        from fastapi_bootstrap.domains.chat.llm_factory import ProviderFactory
+        from domains.chat.llm_factory import ProviderFactory
 
         for settings, expected_prefix in [
             (openai_llm_settings, "openai/"),

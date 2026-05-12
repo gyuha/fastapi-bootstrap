@@ -19,14 +19,14 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from fastapi_bootstrap.core.config import LLMProvider, LLMSettings
-from fastapi_bootstrap.infra.llm.provider_factory import make_chat_litellm
+from core.config import LLMProvider, LLMSettings
+from infra.llm.provider_factory import make_chat_litellm
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-_PROVIDER_FACTORY_PATH = "fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"
+_PROVIDER_FACTORY_PATH = "infra.llm.provider_factory.ChatLiteLLM"
 
 OPENAI_TEST_KEY = "sk-test-infra-factory-key"
 OPENAI_TEST_MODEL = "gpt-4o-mini"
@@ -352,7 +352,7 @@ class TestSettingsNoneFallback:
 
     def test_none_settings_reads_from_get_settings(self) -> None:
         """make_chat_litellm(settings=None) calls get_settings().llm."""
-        _GET_SETTINGS = "fastapi_bootstrap.infra.llm.provider_factory.get_settings"
+        _GET_SETTINGS = "infra.llm.provider_factory.get_settings"
         mock_llm_settings = _make_settings("openai")
 
         with (
@@ -366,7 +366,7 @@ class TestSettingsNoneFallback:
 
     def test_none_settings_uses_llm_sub_settings(self) -> None:
         """make_chat_litellm() constructs ChatLiteLLM from get_settings().llm kwargs."""
-        _GET_SETTINGS = "fastapi_bootstrap.infra.llm.provider_factory.get_settings"
+        _GET_SETTINGS = "infra.llm.provider_factory.get_settings"
         mock_llm_settings = _make_settings("openai", "gpt-4o")
 
         captured, fn = _capture_kwargs()
@@ -394,7 +394,7 @@ class TestInfraLayerIsolation:
         This verifies the infra layer boundary: infra depends on core config
         (LLMSettings) only, never on domain-layer code.
         """
-        import fastapi_bootstrap.infra.llm.provider_factory as factory_module
+        import infra.llm.provider_factory as factory_module
 
         module_vars = vars(factory_module)
         forbidden_domain_symbols = [
@@ -411,7 +411,7 @@ class TestInfraLayerIsolation:
 
     def test_provider_factory_module_exports_make_chat_litellm(self) -> None:
         """make_chat_litellm must be importable from the infra module."""
-        from fastapi_bootstrap.infra.llm.provider_factory import (
+        from infra.llm.provider_factory import (
             make_chat_litellm as fn,
         )
 
@@ -419,9 +419,9 @@ class TestInfraLayerIsolation:
 
     def test_provider_factory_module_exports_chat_litellm_class(self) -> None:
         """ChatLiteLLM must be importable from the infra module for test patching."""
-        import fastapi_bootstrap.infra.llm.provider_factory as factory_module
+        import infra.llm.provider_factory as factory_module
 
         assert hasattr(factory_module, "ChatLiteLLM"), (
             "ChatLiteLLM must be present in provider_factory module namespace "
-            "so tests can patch it at 'fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM'"
+            "so tests can patch it at 'infra.llm.provider_factory.ChatLiteLLM'"
         )

@@ -15,9 +15,9 @@ from dataclasses import dataclass
 
 import pytest
 
-from fastapi_bootstrap.domains.shared.base import AggregateRoot, Entity, ValueObject
-from fastapi_bootstrap.domains.shared.events import DomainEvent, DomainEventBus
-from fastapi_bootstrap.domains.shared.types import (
+from domains.shared.base import AggregateRoot, Entity, ValueObject
+from domains.shared.events import DomainEvent, DomainEventBus
+from domains.shared.types import (
     ConversationId,
     MessageId,
     PermissionKey,

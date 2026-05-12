@@ -23,7 +23,7 @@ from unittest.mock import patch
 
 import pytest
 
-from fastapi_bootstrap.core.config import (
+from core.config import (
     AppEnv,
     LLMProvider,
     LLMSettings,
@@ -319,7 +319,7 @@ class TestContainerConnectivity:
             POSTGRES_USER="app",
             POSTGRES_PASSWORD="app",
             POSTGRES_PORT="5432",
-            POSTGRES_DB="fastapi_bootstrap_db",
+            POSTGRES_DB="app_db",
         )
         url = s.async_database_url
         assert "postgres:5432" in url
@@ -336,7 +336,7 @@ class TestContainerConnectivity:
         This is how docker-compose overrides the URL for the ``app`` profile:
         it sets DATABASE_URL with the container hostname directly.
         """
-        container_url = "postgresql+asyncpg://app:app@postgres:5432/fastapi_bootstrap_db"
+        container_url = "postgresql+asyncpg://app:app@postgres:5432/app_db"
         s = make_settings(
             DATABASE_URL=container_url,
             POSTGRES_HOST="localhost",  # would be wrong — but overridden by DATABASE_URL
@@ -354,7 +354,7 @@ class TestContainerConnectivity:
 
     def test_sync_database_url_for_alembic_container(self) -> None:
         """DATABASE_URL_SYNC produces a psycopg2 DSN for Alembic in container mode."""
-        container_sync_url = "postgresql+psycopg2://app:app@postgres:5432/fastapi_bootstrap_db"
+        container_sync_url = "postgresql+psycopg2://app:app@postgres:5432/app_db"
         s = make_settings(DATABASE_URL_SYNC=container_sync_url)
         assert s.sync_database_url == container_sync_url
         assert "psycopg2" in s.sync_database_url
@@ -367,8 +367,8 @@ class TestContainerConnectivity:
     ) -> None:
         """Settings loads explicit local DSN/Redis/Mailpit values from a .env file."""
         env_file = tmp_path / ".env"
-        async_dsn = "postgresql+asyncpg://app:app@localhost:5432/fastapi_bootstrap_db"
-        sync_dsn = "postgresql+psycopg2://app:app@localhost:5432/fastapi_bootstrap_db"
+        async_dsn = "postgresql+asyncpg://app:app@localhost:5432/app_db"
+        sync_dsn = "postgresql+psycopg2://app:app@localhost:5432/app_db"
         env_file.write_text(
             "\n".join(
                 [

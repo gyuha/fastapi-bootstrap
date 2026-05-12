@@ -51,9 +51,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from fastapi_bootstrap.core.config import LLMProvider, LLMSettings, get_settings
-from fastapi_bootstrap.domains.chat.llm_client import LLMClient, get_llm_client
-from fastapi_bootstrap.domains.chat.llm_factory import ProviderFactory
+from core.config import LLMProvider, LLMSettings, get_settings
+from domains.chat.llm_client import LLMClient, get_llm_client
+from domains.chat.llm_factory import ProviderFactory
 
 # ---------------------------------------------------------------------------
 # Constants — fake credentials / endpoints (never hit a real provider)
@@ -117,8 +117,8 @@ def _capture_litellm_kwargs() -> tuple[dict[str, Any], MagicMock]:
     return captured, mock_cls
 
 
-_CHAT_LITELLM_PATH = "fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"
-_GET_SETTINGS_PATH = "fastapi_bootstrap.domains.chat.llm_client.get_settings"
+_CHAT_LITELLM_PATH = "infra.llm.provider_factory.ChatLiteLLM"
+_GET_SETTINGS_PATH = "domains.chat.llm_client.get_settings"
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,330 @@
+version: "3"
+
+# ============================================================
+# FastAPI Bootstrap — Taskfile
+# https://taskfile.dev
+# ============================================================
+# Usage:
+#   task dev           → spin up infra containers + start FastAPI with hot-reload
+#   task infra         → start infra containers and wait until all healthy
+#   task test          → run full pytest suite
+#   task lint          → ruff check + mypy
+#   task format        → ruff format + ruff check --fix
+#   task migrate       → apply pending Alembic migrations
+#   task install       → uv sync (install all deps incl. dev)
+#   task clean         → remove build/cache artifacts
+# ============================================================
+
+vars:
+  PROJECT: fastapi-bootstrap
+  SRC_DIR: src
+  TEST_DIR: tests
+  HOST: 0.0.0.0
+  PORT: "8000"
+  DISPLAY_HOST: '{{if eq .HOST "0.0.0.0"}}localhost{{else}}{{.HOST}}{{end}}'
+  POSTGRES_PORT: "5432"
+  REDIS_PORT: "6379"
+  MAILPIT_SMTP_PORT: "1025"
+  MAILPIT_UI_PORT: "8025"
+  COMPOSE_FILE: docker-compose.yml
+  INFRA_TIMEOUT: "60"
+
+env:
+  PYTHONPATH: src
+
+tasks:
+  default:
+    desc: Show available tasks
+    silent: true
+    cmds:
+      - task --list
+
+  # ── Setup ───────────────────────────────────────────────────────────────────
+  install:
+    desc: Install all dependencies (including dev) via uv; copy .env if missing
+    cmds:
+      - |
+        if [ ! -f .env ]; then
+          cp .env.example .env
+          echo "📋  .env created from .env.example — edit SECRET_KEY and JWT_SECRET_KEY before production."
+        fi
+      - uv sync
+      - uv run pre-commit install
+      - echo "✅  Dependencies installed. Run 'task dev' to start the full stack."
+
+  # ── Infrastructure ───────────────────────────────────────────────────────────
+  infra:
+    desc: Start infrastructure containers and wait for healthy status
+    cmds:
+      - COMPOSE_FILE={{.COMPOSE_FILE}} bash scripts/wait_for_services.sh {{.INFRA_TIMEOUT}}
+
+  infra-health:
+    desc: Poll all containers until healthy (alias for CI/bootstrap validation)
+    cmds:
+      - COMPOSE_FILE={{.COMPOSE_FILE}} bash scripts/wait_for_services.sh {{.INFRA_TIMEOUT}}
+
+  infra-down:
+    desc: Stop and remove infrastructure containers
+    cmds:
+      - docker compose -f {{.COMPOSE_FILE}} down
+
+  infra-logs:
+    desc: Follow docker-compose logs
+    cmds:
+      - docker compose -f {{.COMPOSE_FILE}} logs -f
+
+  # ── Dev server ───────────────────────────────────────────────────────────────
+  dev:
+    desc: "Bootstrap: install deps + start infra + FastAPI hot-reload"
+    deps: [install, migrate]
+    cmds:
+      - |
+        echo ""
+        echo "🚀  Starting FastAPI at http://{{.DISPLAY_HOST}}:{{.PORT}}"
+        echo "     Docs       : http://{{.DISPLAY_HOST}}:{{.PORT}}/docs"
+        echo "     ReDoc      : http://{{.DISPLAY_HOST}}:{{.PORT}}/redoc"
+        echo "     Health     : http://{{.DISPLAY_HOST}}:{{.PORT}}/health"
+        echo "     Mailpit    : http://localhost:{{.MAILPIT_UI_PORT}}"
+        echo ""
+      - uv run uvicorn main:app
+          --host {{.HOST}}
+          --port {{.PORT}}
+          --reload
+          --reload-dir {{.SRC_DIR}}
+          --log-level info
+
+  serve:
+    desc: Run FastAPI hot-reload without re-running infra or migrations
+    cmds:
+      - echo "🚀  Starting FastAPI at http://{{.DISPLAY_HOST}}:{{.PORT}} (no infra/migrate step)"
+      - uv run uvicorn main:app
+          --host {{.HOST}}
+          --port {{.PORT}}
+          --reload
+          --reload-dir {{.SRC_DIR}}
+          --log-level info
+
+  # ── Testing ──────────────────────────────────────────────────────────────────
+  test:
+    desc: Run all tests with coverage
+    cmds:
+      - uv run pytest {{.TEST_DIR}} -v
+
+  test-unit:
+    desc: Run only unit tests (no I/O)
+    cmds:
+      - uv run pytest {{.TEST_DIR}} -v -m unit
+
+  test-integration:
+    desc: Run only integration tests (requires running infra)
+    cmds:
+      - uv run pytest {{.TEST_DIR}} -v -m integration
+
+  test-mailpit-signup:
+    desc: Run live signup → Mailpit check (requires running FastAPI + Mailpit)
+    cmds:
+      - RUN_MAILPIT_INTEGRATION=1 uv run pytest tests/auth/test_signup_mailpit_integration.py -v --no-cov
+
+  test-cov:
+    desc: Run tests and open HTML coverage report
+    cmds:
+      - uv run pytest {{.TEST_DIR}} --cov={{.SRC_DIR}} --cov-report=html
+      - open htmlcov/index.html 2>/dev/null || xdg-open htmlcov/index.html 2>/dev/null || true
+
+  test-fast:
+    desc: Run tests without coverage (faster feedback loop)
+    cmds:
+      - uv run pytest {{.TEST_DIR}} -v --no-cov
+
+  # ── Code quality ─────────────────────────────────────────────────────────────
+  lint:
+    desc: Run ruff linter + mypy type checker
+    cmds:
+      - echo "── ruff check ──────────────────────────────"
+      - uv run ruff check {{.SRC_DIR}} {{.TEST_DIR}}
+      - echo "── mypy ────────────────────────────────────"
+      - uv run mypy {{.SRC_DIR}}
+
+  format:
+    desc: Auto-format code (ruff format + ruff check --fix)
+    cmds:
+      - echo "── ruff format ─────────────────────────────"
+      - uv run ruff format {{.SRC_DIR}} {{.TEST_DIR}}
+      - echo "── ruff check --fix ────────────────────────"
+      - uv run ruff check --fix {{.SRC_DIR}} {{.TEST_DIR}}
+
+  typecheck:
+    desc: Run mypy only
+    cmds:
+      - uv run mypy {{.SRC_DIR}}
+
+  # ── Alembic migrations ───────────────────────────────────────────────────────
+  migrate:
+    desc: Start local infra if needed, then apply all pending Alembic migrations
+    deps: [infra-health]
+    cmds:
+      - uv run alembic upgrade head
+
+  revision:
+    desc: Create a new autogenerate Alembic revision
+    interactive: true
+    cmds:
+      - |
+        read -p "Migration message: " msg
+        uv run alembic revision --autogenerate -m "$msg"
+
+  downgrade:
+    desc: Downgrade one migration step
+    cmds:
+      - uv run alembic downgrade -1
+
+  migration-history:
+    desc: Show migration history
+    cmds:
+      - uv run alembic history --verbose
+
+  migration-current:
+    desc: Show current migration version
+    cmds:
+      - uv run alembic current
+
+  # ── Pre-commit ───────────────────────────────────────────────────────────────
+  pre-commit-install:
+    desc: Install git pre-commit hooks (ruff + mypy on staged files)
+    cmds:
+      - uv run pre-commit install
+      - echo "✅  Pre-commit installed."
+
+  pre-commit-run:
+    desc: Run all pre-commit hooks on every file (CI / one-off audit)
+    cmds:
+      - uv run pre-commit run --all-files
+
+  pre-commit-update:
+    desc: Update all pre-commit hook revisions to latest
+    cmds:
+      - uv run pre-commit autoupdate
+
+  secrets-baseline:
+    desc: Regenerate .secrets.baseline (detect-secrets full scan)
+    cmds:
+      - |
+        uv run detect-secrets scan \
+          --exclude-files '\.env\.example' \
+          --exclude-files '\.secrets\.baseline' \
+          > .secrets.baseline
+      - |
+        echo "✅  .secrets.baseline updated — review changes with: git diff .secrets.baseline"
+
+  # ── Clean ────────────────────────────────────────────────────────────────────
+  clean:
+    desc: Remove Python cache, build artifacts, and test reports
+    cmds:
+      - find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+      - find . -type f -name "*.pyc" -delete 2>/dev/null || true
+      - find . -type f -name "*.pyo" -delete 2>/dev/null || true
+      - find . -type f -name ".coverage" -delete 2>/dev/null || true
+      - rm -rf .pytest_cache .mypy_cache .ruff_cache htmlcov dist build *.egg-info
+
+  clean-docker:
+    desc: "Remove docker volumes (⚠️  destroys local DB data)"
+    cmds:
+      - docker compose -f {{.COMPOSE_FILE}} down -v --remove-orphans
+
+  # ── Utilities ────────────────────────────────────────────────────────────────
+  shell:
+    desc: Open an interactive Python shell with app context
+    cmds:
+      - uv run python -c "from core.config import settings; print('Settings loaded:', settings.app_env)"
+
+  routes:
+    desc: Print all registered API routes
+    cmds:
+      - uv run python -c "from main import app; [print(r.path, r.methods) for r in app.routes]"
+
+  health:
+    desc: Check liveness endpoint
+    cmds:
+      - |
+        curl -sf http://{{.DISPLAY_HOST}}:{{.PORT}}/health | python3 -m json.tool || \
+          echo "❌  Server not responding at http://{{.DISPLAY_HOST}}:{{.PORT}}/health"
+
+  ready:
+    desc: Check readiness endpoint (PostgreSQL + Redis + Mailpit)
+    cmds:
+      - |
+        curl -sf http://{{.DISPLAY_HOST}}:{{.PORT}}/ready | python3 -m json.tool || \
+          echo "❌  Dependencies not ready at http://{{.DISPLAY_HOST}}:{{.PORT}}/ready"
+
+  # ── Smoke tests ──────────────────────────────────────────────────────────────
+  smoke-test:
+    desc: Run API smoke tests (requires running server + infra)
+    cmds:
+      - uv run python scripts/smoke_test.py --host {{.HOST}} --port {{.PORT}}
+
+  smoke-test-no-chat:
+    desc: Run smoke tests, skip chat/LLM steps (no LLM API key needed)
+    cmds:
+      - uv run python scripts/smoke_test.py --host {{.HOST}} --port {{.PORT}} --skip-chat
+
+  smoke-test-skip-verify:
+    desc: Run smoke tests, skip email verification step
+    cmds:
+      - uv run python scripts/smoke_test.py --host {{.HOST}} --port {{.PORT}} --skip-email-verify
+
+  # ── Production ───────────────────────────────────────────────────────────────
+  prod-up:
+    desc: Start production stack (postgres + redis + app; no mailpit)
+    cmds:
+      - |
+        if [ ! -f .env.prod ]; then
+          echo "❌  .env.prod 파일이 없습니다."
+          echo "    cp .env.prod.example .env.prod"
+          echo "    # 그 후 SECRET_KEY, JWT_SECRET_KEY, DB 비밀번호 등을 채우세요."
+          exit 1
+        fi
+      - docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile prod up -d --build
+      - |
+        echo ""
+        echo "🚀  Production stack started."
+        echo "     Health: http://{{.DISPLAY_HOST}}:{{.PORT}}/health"
+        echo "     Logs  : task prod-logs"
+
+  prod-down:
+    desc: Stop and remove production containers
+    cmds:
+      - docker compose -f docker-compose.yml -f docker-compose.prod.yml down
+
+  prod-logs:
+    desc: Follow production service logs
+    cmds:
+      - docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f
+
+  prod-build:
+    desc: Build production Docker image only (--target runtime)
+    cmds:
+      - |
+        docker build \
+          --target runtime \
+          --tag {{.PROJECT}}:prod \
+          --build-arg PYTHON_VERSION="3.12" \
+          .
+      - |
+        echo "✅  Image built: {{.PROJECT}}:prod"
+
+  prod-migrate:
+    desc: Run Alembic migrations in production container
+    cmds:
+      - |
+        if [ ! -f .env.prod ]; then
+          echo "❌  .env.prod 파일이 없습니다. cp .env.prod.example .env.prod"
+          exit 1
+        fi
+      - docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile prod run --rm app alembic upgrade head
+
+  prod-health:
+    desc: Check production app health endpoint
+    cmds:
+      - |
+        curl -sf http://{{.DISPLAY_HOST}}:{{.PORT}}/health | python3 -m json.tool || \
+          echo "❌  Production server not responding at http://{{.DISPLAY_HOST}}:{{.PORT}}/health"

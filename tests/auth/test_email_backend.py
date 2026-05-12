@@ -15,8 +15,8 @@ from unittest.mock import patch
 
 import pytest
 
-from fastapi_bootstrap.core.config import get_settings
-from fastapi_bootstrap.domains.auth import email as email_module
+from core.config import get_settings
+from domains.auth import email as email_module
 
 
 class CapturingFastMail:

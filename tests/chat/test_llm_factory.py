@@ -21,8 +21,8 @@ from __future__ import annotations
 
 import pytest
 
-from fastapi_bootstrap.core.config import LLMProvider, LLMSettings
-from fastapi_bootstrap.domains.chat.llm_factory import ProviderFactory
+from core.config import LLMProvider, LLMSettings
+from domains.chat.llm_factory import ProviderFactory
 
 # ---------------------------------------------------------------------------
 # Helpers

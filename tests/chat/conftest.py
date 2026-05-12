@@ -69,9 +69,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from langchain_core.messages import AIMessage
 
-from fastapi_bootstrap.core.config import LLMProvider, LLMSettings
-from fastapi_bootstrap.domains.chat.ports import LLMClientProtocol
-from fastapi_bootstrap.domains.chat.service import ChatService
+from core.config import LLMProvider, LLMSettings
+from domains.chat.ports import LLMClientProtocol
+from domains.chat.service import ChatService
 
 from ._mocks import (
     FAKE_RESPONSE_TEXT,
@@ -124,7 +124,7 @@ def env_openai(monkeypatch: pytest.MonkeyPatch) -> None:
     Usage::
 
         def test_with_openai_env(env_openai):
-            from fastapi_bootstrap.core.config import get_settings
+            from core.config import get_settings
             s = get_settings()
             assert s.llm_provider.value == "openai"
     """
@@ -151,7 +151,7 @@ def env_ollama(monkeypatch: pytest.MonkeyPatch) -> None:
     Usage::
 
         def test_with_ollama_env(env_ollama):
-            from fastapi_bootstrap.core.config import get_settings
+            from core.config import get_settings
             s = get_settings()
             assert s.llm_provider.value == "ollama"
     """
@@ -224,13 +224,13 @@ def patched_chat_litellm() -> Any:  # type: ignore[misc]
     Usage::
 
         def test_kwargs_forwarded(patched_chat_litellm, openai_llm_settings):
-            from fastapi_bootstrap.domains.chat.llm_client import LLMClient
+            from domains.chat.llm_client import LLMClient
             LLMClient(settings=openai_llm_settings, temperature=0.7)
             _, kwargs = patched_chat_litellm.call_args
             assert kwargs["temperature"] == 0.7
             assert kwargs["model"] == "openai/gpt-4o-mini"
     """
-    with patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM") as mock_cls:
+    with patch("infra.llm.provider_factory.ChatLiteLLM") as mock_cls:
         yield mock_cls
 
 
@@ -252,7 +252,7 @@ def fake_chat_litellm_openai() -> Any:  # type: ignore[misc]
         api_key=OPENAI_TEST_KEY,
     )
     with patch(
-        "fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM",
+        "infra.llm.provider_factory.ChatLiteLLM",
         return_value=fake_instance,
     ):
         yield fake_instance
@@ -277,7 +277,7 @@ def fake_chat_litellm_ollama() -> Any:  # type: ignore[misc]
         api_key="ollama",
     )
     with patch(
-        "fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM",
+        "infra.llm.provider_factory.ChatLiteLLM",
         return_value=fake_instance,
     ):
         yield fake_instance
@@ -314,7 +314,7 @@ def llm_client_openai(
             assert result.content == FAKE_RESPONSE_TEXT
     """
     # ChatLiteLLM is already patched by fake_chat_litellm_openai fixture
-    from fastapi_bootstrap.domains.chat.llm_client import LLMClient
+    from domains.chat.llm_client import LLMClient
 
     return LLMClient(settings=openai_llm_settings)
 
@@ -343,7 +343,7 @@ def llm_client_ollama(
             chunks = [c async for c in llm_client_ollama.astream([HumanMessage(content="hi")])]
             assert len(chunks) > 0
     """
-    from fastapi_bootstrap.domains.chat.llm_client import LLMClient
+    from domains.chat.llm_client import LLMClient
 
     return LLMClient(settings=ollama_llm_settings)
 

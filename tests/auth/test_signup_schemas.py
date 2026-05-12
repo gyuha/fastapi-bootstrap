@@ -8,7 +8,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from fastapi_bootstrap.domains.auth.schemas import (
+from domains.auth.schemas import (
     SignupRequest,
     SignupResponse,
     UserResponse,

@@ -210,11 +210,11 @@ class FakeStreamingChatLiteLLM(FakeChatLiteLLM):
 
 
 class StubLLMClient:
-    """Minimal :class:`~fastapi_bootstrap.domains.chat.ports.LLMClientProtocol` satisfier.
+    """Minimal :class:`~app.domains.chat.ports.LLMClientProtocol` satisfier.
 
     A plain Python class — no ``unittest.mock.patch`` is used.  This makes it
     the *fastest* and *simplest* way to inject an LLM client into
-    :class:`~fastapi_bootstrap.domains.chat.service.ChatService` during tests.
+    :class:`~app.domains.chat.service.ChatService` during tests.
 
     Satisfies the protocol structurally: has ``ainvoke`` and ``astream`` with
     the correct signatures.  Use when you need to test service-level logic
@@ -234,7 +234,7 @@ class StubLLMClient:
     ::
 
         from langchain_core.messages import HumanMessage
-        from fastapi_bootstrap.domains.chat.service import ChatService
+        from domains.chat.service import ChatService
 
         client = StubLLMClient()
         service = ChatService(llm_client=client)  # type: ignore[arg-type]

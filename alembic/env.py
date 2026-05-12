@@ -2,7 +2,7 @@
 
 Reads the database URL from the ``DATABASE_URL_SYNC`` environment variable
 (or falls back to assembling it from the individual ``POSTGRES_*`` parts via
-:class:`~fastapi_bootstrap.core.config.Settings`).
+:class:`~app.core.config.Settings`).
 
 Supports two run modes:
 * **offline** — generates SQL migration scripts without a live DB connection.
@@ -88,7 +88,7 @@ def _get_sync_db_url() -> str:
 
     # ── 2. Assembled from Settings (reads POSTGRES_* vars) ───────────────────
     try:
-        from fastapi_bootstrap.core.config import Settings
+        from core.config import Settings
 
         s = Settings(_env_file=None)  # type: ignore[call-arg]
         return s.sync_database_url
@@ -110,7 +110,7 @@ def _get_sync_db_url() -> str:
         "  DATABASE_URL_SYNC=postgresql+psycopg2://"
         "app:app"
         "@localhost:5432"
-        "/fastapi_bootstrap_db"
+        "/app_db"
     )
 
 
@@ -124,17 +124,17 @@ config.set_main_option("sqlalchemy.url", _db_url)
 # The target_metadata is used by `alembic revision --autogenerate`.
 # Import models here to populate the metadata before Alembic inspects it.
 try:
-    from fastapi_bootstrap.core.database import Base
+    from core.database import Base
 
     # Import all domain models so Alembic autogenerate can detect them.
     # Add new model modules here when new domains are created.
     try:
-        from fastapi_bootstrap.domains.auth import models as _auth_models  # noqa: F401
+        from domains.auth import models as _auth_models  # noqa: F401
     except ImportError:
         logger.debug("auth models not found — skipping")
 
     try:
-        from fastapi_bootstrap.domains.chat import models as _chat_models  # noqa: F401
+        from domains.chat import models as _chat_models  # noqa: F401
     except ImportError:
         logger.debug("chat models not found — skipping")
 
@@ -143,7 +143,7 @@ except ImportError:
     # Database module may not be created yet (bootstrapping phase).
     # Autogenerate will work once the models are in place.
     logger.warning(
-        "Could not import fastapi_bootstrap.core.database — "
+        "Could not import core.database — "
         "autogenerate will not detect schema changes until models are added."
     )
     target_metadata = None

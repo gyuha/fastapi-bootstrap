@@ -8,7 +8,7 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from fastapi_bootstrap.domains.auth.router import _get_service, router
+from domains.auth.router import _get_service, router
 
 
 class FakeRefreshService:

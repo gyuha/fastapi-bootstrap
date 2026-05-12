@@ -99,8 +99,8 @@ services:
       # 컨테이너 내부에서는 서비스명으로 통신 (localhost 불가)
       POSTGRES_HOST: postgres
       REDIS_HOST: redis
-      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@postgres:5432/${POSTGRES_DB:-fastapi_bootstrap_db}"
-      DATABASE_URL_SYNC: "postgresql+psycopg2://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@postgres:5432/${POSTGRES_DB:-fastapi_bootstrap_db}"
+      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@postgres:5432/${POSTGRES_DB:-app_db}"
+      DATABASE_URL_SYNC: "postgresql+psycopg2://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:-app}@postgres:5432/${POSTGRES_DB:-app_db}"
       REDIS_URL: "redis://redis:6379/${REDIS_DB:-0}"
 
       # ── 프로덕션 모드 강제 ──────────────────────────────────────────────────
