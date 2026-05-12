@@ -7,9 +7,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from fastapi_bootstrap.domains.auth.models import User
-from fastapi_bootstrap.domains.auth.security import verify_password
-from fastapi_bootstrap.domains.auth.service import AuthService
+from domains.auth.models import User
+from domains.auth.security import verify_password
+from domains.auth.service import AuthService
 
 
 @dataclass

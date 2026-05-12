@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from fastapi_bootstrap.domains.auth.schemas import LoginRequest
+from domains.auth.schemas import LoginRequest
 
 
 def _error_by_location(exc: ValidationError) -> dict[str, dict[str, object]]:

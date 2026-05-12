@@ -38,18 +38,18 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from fastapi_bootstrap.core.config import LLMProvider, LLMSettings
-from fastapi_bootstrap.domains.chat.llm_client import (
+from core.config import LLMProvider, LLMSettings
+from domains.chat.llm_client import (
     DefaultLLMClientFactory,
     LLMClient,
     get_llm_client,
 )
-from fastapi_bootstrap.domains.chat.ports import (
+from domains.chat.ports import (
     AbstractLLMPort,
     LLMClientFactoryProtocol,
     LLMClientProtocol,
 )
-from fastapi_bootstrap.domains.chat.service import ChatService
+from domains.chat.service import ChatService
 
 # ---------------------------------------------------------------------------
 # Helpers — minimal implementations of the protocols
@@ -141,7 +141,7 @@ class TestLLMClientProtocolStructural:
 
     def test_llm_client_satisfies_protocol(self) -> None:
         """The concrete LLMClient must satisfy LLMClientProtocol."""
-        with patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"):
+        with patch("infra.llm.provider_factory.ChatLiteLLM"):
             client = LLMClient(settings=_make_llm_settings())
         assert isinstance(client, LLMClientProtocol)
 
@@ -203,8 +203,8 @@ class TestDefaultLLMClientFactory:
 
     def test_returns_llm_client_instance(self) -> None:
         with (
-            patch("fastapi_bootstrap.domains.chat.llm_client.get_settings") as mock_get_settings,
-            patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"),
+            patch("domains.chat.llm_client.get_settings") as mock_get_settings,
+            patch("infra.llm.provider_factory.ChatLiteLLM"),
         ):
             mock_settings = MagicMock()
             mock_settings.llm = _make_llm_settings("openai", "gpt-4o-mini")
@@ -218,8 +218,8 @@ class TestDefaultLLMClientFactory:
     def test_returned_client_satisfies_llm_client_protocol(self) -> None:
         """get_llm_client() return value must satisfy LLMClientProtocol."""
         with (
-            patch("fastapi_bootstrap.domains.chat.llm_client.get_settings") as mock_get_settings,
-            patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"),
+            patch("domains.chat.llm_client.get_settings") as mock_get_settings,
+            patch("infra.llm.provider_factory.ChatLiteLLM"),
         ):
             mock_settings = MagicMock()
             mock_settings.llm = _make_llm_settings()
@@ -232,8 +232,8 @@ class TestDefaultLLMClientFactory:
     def test_get_llm_client_reads_app_settings(self) -> None:
         """Factory must call get_settings() to source LLM configuration."""
         with (
-            patch("fastapi_bootstrap.domains.chat.llm_client.get_settings") as mock_get_settings,
-            patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"),
+            patch("domains.chat.llm_client.get_settings") as mock_get_settings,
+            patch("infra.llm.provider_factory.ChatLiteLLM"),
         ):
             mock_settings = MagicMock()
             mock_settings.llm = _make_llm_settings()
@@ -267,8 +267,8 @@ class TestGetLlmClientModuleFunction:
 
     def test_get_llm_client_returns_llm_client(self) -> None:
         with (
-            patch("fastapi_bootstrap.domains.chat.llm_client.get_settings") as mock_get_settings,
-            patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"),
+            patch("domains.chat.llm_client.get_settings") as mock_get_settings,
+            patch("infra.llm.provider_factory.ChatLiteLLM"),
         ):
             mock_settings = MagicMock()
             mock_settings.llm = _make_llm_settings()
@@ -297,7 +297,7 @@ class TestChatServiceProtocolDependency:
 
     def test_accepts_concrete_llm_client(self) -> None:
         """ChatService can be constructed with the concrete LLMClient."""
-        with patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"):
+        with patch("infra.llm.provider_factory.ChatLiteLLM"):
             client = LLMClient(settings=_make_llm_settings())
         service = ChatService(llm_client=client)
         assert service is not None
@@ -483,7 +483,7 @@ class TestChatServiceDomainIsolation:
 
     def test_service_module_does_not_import_llm_client_class(self) -> None:
         """The service module must not import the concrete LLMClient."""
-        import fastapi_bootstrap.domains.chat.service as service_module
+        import domains.chat.service as service_module
 
         # Get all names imported into the service module
         module_vars = vars(service_module)
@@ -496,7 +496,7 @@ class TestChatServiceDomainIsolation:
 
     def test_service_module_does_not_import_langchain_litellm(self) -> None:
         """The service module must not import langchain_litellm (infrastructure)."""
-        import fastapi_bootstrap.domains.chat.service as service_module
+        import domains.chat.service as service_module
 
         module_vars = vars(service_module)
         assert "ChatLiteLLM" not in module_vars, (
@@ -506,7 +506,7 @@ class TestChatServiceDomainIsolation:
 
     def test_service_module_does_not_import_provider_factory(self) -> None:
         """The service module must not import ProviderFactory (infrastructure)."""
-        import fastapi_bootstrap.domains.chat.service as service_module
+        import domains.chat.service as service_module
 
         module_vars = vars(service_module)
         assert "ProviderFactory" not in module_vars, (
@@ -521,7 +521,7 @@ class TestChatServiceDomainIsolation:
         TYPE_CHECKING block — never as runtime module-level names.  This
         enforces zero provider imports at service runtime.
         """
-        import fastapi_bootstrap.domains.chat.service as service_module
+        import domains.chat.service as service_module
 
         module_vars = vars(service_module)
         # These must be absent from the runtime namespace (TYPE_CHECKING only)
@@ -536,8 +536,8 @@ class TestChatServiceDomainIsolation:
 
     def test_service_module_references_abstract_llm_port(self) -> None:
         """The service module must reference AbstractLLMPort (not LLMClientProtocol)."""
-        import fastapi_bootstrap.domains.chat.service as service_module
-        from fastapi_bootstrap.domains.chat.ports import AbstractLLMPort
+        import domains.chat.service as service_module
+        from domains.chat.ports import AbstractLLMPort
 
         module_vars = vars(service_module)
         assert "AbstractLLMPort" in module_vars, (

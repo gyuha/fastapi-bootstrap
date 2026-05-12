@@ -7,8 +7,8 @@ from typing import Any
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from fastapi_bootstrap.domains.auth.router import _get_service, router
-from fastapi_bootstrap.domains.auth.service import AuthService
+from domains.auth.router import _get_service, router
+from domains.auth.service import AuthService
 
 _PASSWORD = "Password1!"
 _GENERIC_MESSAGE = "If an account with that email exists, a reset link has been sent."

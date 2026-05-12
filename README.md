@@ -15,10 +15,9 @@
 사전 요구사항만 갖춰지면 **한 명령어**로 전체 스택이 기동됩니다.
 
 ```bash
-# 필수 도구: Docker Desktop + uv (없다면 아래 사전 요구사항 섹션 참조)
+# 필수 도구: Docker Desktop + uv + task (없다면 아래 사전 요구사항 섹션 참조)
 
-make dev   # Makefile 사용 시
-just dev   # Justfile 사용 시 (just 설치 필요: https://github.com/casey/just)
+task dev
 ```
 
 내부 동작 순서:
@@ -68,7 +67,7 @@ curl http://localhost:8000/ready
 
 **FastAPI Bootstrap** 은 FastAPI 기반의 Production-grade 백엔드 서버입니다.
 
-- 생성 메타데이터: project slug `fastapi-bootstrap`, Python package `fastapi_bootstrap`, public API base `http://localhost:8000`.
+- 생성 메타데이터: project slug `fastapi-bootstrap`, public API base `http://localhost:8000`.
 - **Light 모듈러 모놀리스 DDD** 구조로 도메인 경계를 명확히 유지합니다.
 
 - **Auth 도메인**: JWT(Bearer) + OAuth(google,kakao,naver) + RBAC 기반의 완전한 인증·인가 시스템을 제공합니다.
@@ -149,22 +148,32 @@ curl http://localhost:8000/ready
 
 ```
 domains/
-├── auth/            ← 인증·인가 도메인 (JWT + OAuth + RBAC)
-│   ├── router.py    /api/v1/auth/...
-│   ├── service.py
-│   ├── repository.py
-│   ├── models.py    User, Role, Permission, RefreshToken ...
-│   ├── schemas.py
-│   ├── permissions.py   require_permission() 데코레이터
-│   └── oauth/       소셜 로그인 어댑터 (프로바이더별 파일)
+├── auth/                    ← 인증·인가 도메인 (JWT + OAuth + RBAC)
+│   ├── router/
+│   │   └── auth_router.py   /api/v1/auth/...
+│   ├── service/
+│   │   └── auth_service.py
+│   ├── repository/
+│   │   └── auth_repository.py
+│   ├── models/
+│   │   └── auth_models.py   User, Role, Permission, RefreshToken ...
+│   ├── schemas/
+│   │   └── auth_schemas.py
+│   ├── security.py          JWT + argon2
+│   ├── email.py
+│   └── oauth/               소셜 로그인 어댑터 (프로바이더별 파일)
 
-└── chat/            ← LLM 채팅 프록시 도메인
-    ├── router.py    /api/v1/chat/... (SSE 스트리밍)
-    ├── service.py   LangChain runnable 오케스트레이션
-    ├── repository.py   Conversation / Message DB 쿼리
-    ├── models.py    Conversation, Message
-    └── schemas.py
-
+└── chat/                    ← LLM 채팅 프록시 도메인
+    ├── router/
+    │   └── chat_router.py   /api/v1/chat/... (SSE 스트리밍)
+    ├── service/
+    │   └── chat_service.py  LangChain runnable 오케스트레이션
+    ├── repository/
+    │   └── chat_repository.py
+    ├── models/
+    │   └── chat_models.py   Conversation, Message
+    └── schemas/
+        └── chat_schemas.py
 ```
 
 ### 요청 흐름 (Request Flow)
@@ -303,15 +312,15 @@ graph LR
 | Docker Desktop | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) |
 | uv | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | Python >= 3.12 | `uv python install 3.12` |
+| task | `brew install go-task` 또는 [taskfile.dev/installation](https://taskfile.dev/installation/) |
 
 ### 원클릭 부팅 (권장)
 
 ```bash
-make dev   # Makefile (make 기반)
-just dev   # Justfile (just 기반, 동일한 동작)
+task dev
 ```
 
-> `make dev` / `just dev`는 아래 5단계를 **자동으로** 순서대로 실행합니다.
+> `task dev`는 아래 5단계를 **자동으로** 순서대로 실행합니다.
 
 ### 단계별 부팅 (수동)
 
@@ -338,7 +347,7 @@ uv sync
 
 ```bash
 # postgres + redis + mailpit 컨테이너 기동 (healthy 상태까지 대기)
-make infra
+task infra
 
 # 상태 확인
 docker compose ps
@@ -354,10 +363,11 @@ uv run alembic upgrade head
 
 ```bash
 # hot-reload 활성화 (파일 저장 시 자동 재시작)
-uv run uvicorn fastapi_bootstrap.main:app \
+uv run uvicorn main:app \
     --host 0.0.0.0 \
     --port 8000 \
-    --reload
+    --reload \
+    --reload-dir src
 ```
 
 ### 헬스체크 확인
@@ -377,9 +387,7 @@ curl http://localhost:8000/health
 
 ```bash
 # 권장: infra + migration + host-run FastAPI hot reload
-make dev
-# 또는
-just dev
+task dev
 ```
 
 ### Production 모드 (`--profile prod`)
@@ -401,23 +409,23 @@ openssl rand -hex 32   # → SECRET_KEY
 openssl rand -hex 32   # → JWT_SECRET_KEY
 
 # 2. (최초 배포) 마이그레이션 실행
-make prod-migrate
+task prod-migrate
 
 # 3. 프로덕션 스택 기동 (postgres + redis + app)
-make prod-up
+task prod-up
 
 # 4. 헬스체크
-make prod-health
+task prod-health
 # → {"status": "ok", "env": "production"}
 
 # 이미지 단독 빌드
-make prod-build
+task prod-build
 
 # 로그 확인
-make prod-logs
+task prod-logs
 
 # 스택 종료
-make prod-down
+task prod-down
 ```
 
 > **보안 주의사항**:
@@ -425,34 +433,31 @@ make prod-down
 > - `SECRET_KEY`와 `JWT_SECRET_KEY`는 반드시 별개의 강력한 랜덤 값을 사용하세요
 > - `APP_ENV=production`, `APP_DEBUG=false`는 오버레이에서 자동 설정됩니다
 
-### Makefile / Justfile 주요 명령어
-
-두 가지 태스크 러너를 모두 지원합니다. `make <target>` 과 `just <recipe>` 는 동일하게 동작합니다.
+### Taskfile 주요 명령어
 
 ```bash
 # 전체 명령어 목록
-make help               # Makefile 사용 시
-just                    # Justfile 사용 시 (just --list)
+task
 
 # 개발
-make dev / just dev         # 풀 부트스트랩 (권장) ← install + infra + migrate + uvicorn
-make serve / just serve     # 서버만 재시작 (infra 이미 실행 중일 때)
-make infra / just infra     # docker-compose up -d (infra only, healthy 대기)
-make infra-down / just infra-down   # docker-compose down
-make migrate / just migrate         # alembic upgrade head
+task dev          # 풀 부트스트랩 (권장) ← install + infra + migrate + uvicorn
+task serve        # 서버만 재시작 (infra 이미 실행 중일 때)
+task infra        # docker-compose up -d (infra only, healthy 대기)
+task infra-down   # docker-compose down
+task migrate      # alembic upgrade head
 
 # 테스트 & 품질
-make test / just test       # pytest (전체)
-make lint / just lint       # ruff check + mypy
-make format / just format   # ruff format + ruff check --fix
-make clean / just clean     # 빌드 캐시 정리
+task test         # pytest (전체)
+task lint         # ruff check + mypy
+task format       # ruff format + ruff check --fix
+task clean        # 빌드 캐시 정리
 
-# 프로덕션 (Makefile 전용)
-make prod-up            # 프로덕션 스택 기동 (postgres + redis + app)
-make prod-down          # 프로덕션 스택 종료
-make prod-logs          # 프로덕션 로그 스트리밍
-make prod-build         # 프로덕션 이미지 빌드 (--target runtime)
-make prod-migrate       # 프로덕션 컨테이너에서 Alembic 마이그레이션 실행
+# 프로덕션
+task prod-up      # 프로덕션 스택 기동 (postgres + redis + app)
+task prod-down    # 프로덕션 스택 종료
+task prod-logs    # 프로덕션 로그 스트리밍
+task prod-build   # 프로덕션 이미지 빌드 (--target runtime)
+task prod-migrate # 프로덕션 컨테이너에서 Alembic 마이그레이션 실행
 ```
 
 ---
@@ -498,7 +503,7 @@ OPENAI_API_KEY=sk-...
 | `POSTGRES_PORT` | `5432` | PostgreSQL 포트 |
 | `POSTGRES_USER` | `app` | DB 사용자 |
 | `POSTGRES_PASSWORD` | `app` | DB 비밀번호 |
-| `POSTGRES_DB` | `fastapi_bootstrap_db` | DB 이름 |
+| `POSTGRES_DB` | `app_db` | DB 이름 |
 | `DATABASE_URL` | *(자동 조합)* | `postgresql+asyncpg://...` (명시 시 우선 적용) |
 | `DATABASE_URL_SYNC` | *(자동 조합)* | `postgresql+psycopg2://...` (Alembic용) |
 
@@ -599,68 +604,71 @@ OPENAI_API_KEY=sk-...
 ```
 fastapi-bootstrap/
 │
-├── src/
-│   └── fastapi_bootstrap/          # 메인 Python 패키지 (src-layout)
-│       │
-│       ├── main.py                               # FastAPI app 팩토리 + 라이프사이클
-│       ├── __init__.py
-│       │
-│       ├── core/                                 # 횡단 관심사 (도메인 무관 공통 코드)
-│       │   ├── config.py                         # Pydantic Settings (env 로딩)
-│       │   ├── database.py                       # SQLAlchemy async engine / session
-│       │   ├── redis.py                          # Redis 커넥션 풀
-│       │   ├── security.py                       # JWT encode/decode, argon2 해시
-│       │   ├── middleware.py                     # correlation_id + structlog 미들웨어
-│       │   ├── exceptions.py                     # 공통 HTTPException 핸들러
-│       │   └── deps.py                           # FastAPI Depends (get_db, get_current_user 등)
-│       │
-│       └── domains/                              # DDD Bounded Contexts
-│           │
-│           ├── auth/                             # 인증·인가 도메인
-│           │   ├── router.py                     # /api/v1/auth/ 엔드포인트
-│           │   ├── service.py                    # 비즈니스 로직
-│           │   ├── repository.py                 # DB 쿼리 (User, RefreshToken 등)
-│           │   ├── models.py                     # SQLAlchemy ORM 모델
-│           │   ├── schemas.py                    # Pydantic 요청/응답 스키마
-│           │   ├── permissions.py                # require_permission 데코레이터
-
-│           │   └── oauth/                        # OAuth 어댑터 (프로바이더별 파일)
-
-│           │       ├── google.py
-
-
-│           │       ├── kakao.py
-
-
-│           │       └── naver.py
-
-
-│           │
-
-│           └── chat/                             # LLM 채팅 프록시 도메인
-│               ├── router.py                     # /api/v1/chat/ 엔드포인트 (SSE)
-│               ├── service.py                    # LangChain runnable 오케스트레이션
-│               ├── repository.py                 # Conversation / Message DB 쿼리
-│               ├── models.py                     # SQLAlchemy ORM 모델
-│               └── schemas.py                    # Pydantic 요청/응답 스키마
+├── src/                                          # Python path 루트 (PYTHONPATH=src)
+│   ├── main.py                                   # FastAPI app 팩토리 + 라이프사이클
+│   ├── __main__.py                               # python -m 실행 진입점
+│   │
+│   ├── core/                                     # 횡단 관심사 (도메인 무관 공통 코드)
+│   │   ├── config.py                             # Pydantic Settings (env 로딩)
+│   │   ├── database.py                           # SQLAlchemy async engine / session
+│   │   ├── redis.py                              # Redis 커넥션 풀
+│   │   ├── middleware.py                         # correlation_id + structlog 미들웨어
+│   │   └── exceptions.py                         # 공통 HTTPException 핸들러
+│   │
+│   ├── domains/                                  # DDD Bounded Contexts
+│   │   ├── auth/                                 # 인증·인가 도메인
+│   │   │   ├── router/
+│   │   │   │   └── auth_router.py               # /api/v1/auth/ 엔드포인트
+│   │   │   ├── service/
+│   │   │   │   └── auth_service.py              # 비즈니스 로직
+│   │   │   ├── repository/
+│   │   │   │   └── auth_repository.py           # DB 쿼리 (User, RefreshToken 등)
+│   │   │   ├── models/
+│   │   │   │   └── auth_models.py               # SQLAlchemy ORM 모델
+│   │   │   ├── schemas/
+│   │   │   │   └── auth_schemas.py              # Pydantic 요청/응답 스키마
+│   │   │   ├── security.py                      # JWT encode/decode, argon2 해시
+│   │   │   ├── email.py                         # 이메일 발송 서비스
+│   │   │   └── oauth/                           # OAuth 어댑터 (프로바이더별 파일)
+│   │   │       ├── google.py
+│   │   │       ├── kakao.py
+│   │   │       └── naver.py
+│   │   │
+│   │   ├── chat/                                 # LLM 채팅 프록시 도메인
+│   │   │   ├── router/
+│   │   │   │   └── chat_router.py               # /api/v1/chat/ 엔드포인트 (SSE)
+│   │   │   ├── service/
+│   │   │   │   └── chat_service.py              # LangChain runnable 오케스트레이션
+│   │   │   ├── repository/
+│   │   │   │   └── chat_repository.py           # Conversation / Message DB 쿼리
+│   │   │   ├── models/
+│   │   │   │   └── chat_models.py               # SQLAlchemy ORM 모델
+│   │   │   ├── schemas/
+│   │   │   │   └── chat_schemas.py              # Pydantic 요청/응답 스키마
+│   │   │   ├── llm_client.py
+│   │   │   ├── llm_factory.py
+│   │   │   ├── container.py
+│   │   │   └── ports.py
+│   │   │
+│   │   └── shared/                              # 도메인 공유 기반 코드
+│   │       ├── base.py
+│   │       ├── events.py
+│   │       └── types.py
+│   │
+│   └── infra/                                    # 외부 시스템 어댑터
+│       └── llm/
+│           └── provider_factory.py
 │
-
 ├── tests/                                        # pytest 테스트
 │   ├── conftest.py                               # 공통 fixture (DB, Redis, 앱 클라이언트)
 │   ├── auth/                                     # Auth 도메인 통합 테스트
-│   │   └── test_auth_flow.py                     # signup → verify → login → refresh → logout
-
 │   └── chat/                                     # Chat 도메인 통합 테스트
-│       └── test_chat_stream.py                   # SSE 스트리밍 + DB 영속화 검증
-
 │
 ├── alembic/                                      # DB 마이그레이션
 │   ├── env.py                                    # async 마이그레이션 설정
-│   ├── script.py.mako                            # 리비전 파일 템플릿
 │   └── versions/                                 # 생성된 마이그레이션 파일들
 │
 ├── scripts/                                      # 유틸리티 스크립트
-│   ├── wait_for_services.sh                      # docker-compose healthy 대기 스크립트
 │   └── smoke_test.py                             # API 기동 검증 스크립트
 │
 ├── docker-compose.yml                            # 로컬 인프라 전용 (postgres / redis / mailpit)
@@ -669,11 +677,8 @@ fastapi-bootstrap/
 ├── .env.example                                  # 환경변수 템플릿
 ├── alembic.ini                                   # Alembic 설정
 ├── pyproject.toml                                # 프로젝트 메타데이터 + 도구 설정
-├── Makefile                                      # 개발 편의 명령어 (make dev 등)
-├── Justfile                                      # just 기반 동등 레시피 (just dev 등)
-
+├── Taskfile.yml                                  # 개발 편의 명령어 (task dev 등)
 └── .pre-commit-config.yaml                       # pre-commit 훅 (ruff + mypy)
-
 ```
 
 ---
@@ -809,11 +814,11 @@ sequenceDiagram
 # 전체 테스트 (커버리지 포함)
 uv run pytest
 
-# Makefile 단축키
-make test              # 전체 테스트
-make test-unit         # 단위 테스트만 (-m unit)
-make test-integration  # 통합 테스트만 (-m integration, infra 필요)
-make test-cov          # 커버리지 HTML 리포트 (htmlcov/index.html)
+# Taskfile 단축키
+task test              # 전체 테스트
+task test-unit         # 단위 테스트만 (-m unit)
+task test-integration  # 통합 테스트만 (-m integration, infra 필요)
+task test-cov          # 커버리지 HTML 리포트 (htmlcov/index.html)
 
 # 특정 파일
 uv run pytest tests/auth/test_auth_flow.py -v
@@ -838,9 +843,9 @@ uv run ruff check --fix src/ tests/
 # 타입 검사 (mypy strict)
 uv run mypy src/
 
-# 전체 품질 검사 (Makefile)
-make lint      # ruff check + mypy
-make format    # ruff format + ruff check --fix
+# 전체 품질 검사 (Taskfile)
+task lint      # ruff check + mypy
+task format    # ruff format + ruff check --fix
 
 
 # pre-commit 설치 (최초 1회)
@@ -871,10 +876,10 @@ uv run alembic downgrade -1
 # 특정 리비전으로 롤백
 uv run alembic downgrade <revision_id>
 
-# Makefile 단축키
-make migrate          # alembic upgrade head
-make revision         # 새 revision 생성 (메시지 입력 프롬프트)
-make downgrade        # 한 단계 롤백
+# Taskfile 단축키
+task migrate          # alembic upgrade head
+task revision         # 새 revision 생성 (메시지 입력 프롬프트)
+task downgrade        # 한 단계 롤백
 ```
 
 > 마이그레이션 파일은 항상 코드 리뷰를 거쳐 커밋합니다. autogenerate로 생성된 SQL을 반드시 검토하세요.

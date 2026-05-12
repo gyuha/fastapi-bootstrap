@@ -36,8 +36,8 @@ _PROJECT_ROOT = Path(__file__).parent.parent  # generated project root
 _MAKEFILE = _PROJECT_ROOT / "Makefile"
 _JUSTFILE = _PROJECT_ROOT / "Justfile"
 _COMPOSE_FILE = _PROJECT_ROOT / "docker-compose.yml"
-_MAIN_PY = _PROJECT_ROOT / "src" / "fastapi_bootstrap" / "main.py"
-_MAIN_MODULE = _PROJECT_ROOT / "src" / "fastapi_bootstrap" / "__main__.py"
+_MAIN_PY = _PROJECT_ROOT / "src" / "main.py"
+_MAIN_MODULE = _PROJECT_ROOT / "src" / "__main__.py"
 _SMOKE_TEST = _PROJECT_ROOT / "scripts" / "smoke_test.py"
 
 
@@ -321,7 +321,7 @@ class TestDockerComposeInfraOnly:
         )
         assert "POSTGRES_USER: ${POSTGRES_USER:-app}" in postgres_section
         assert "POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}" in postgres_section
-        assert "POSTGRES_DB: ${POSTGRES_DB:-fastapi_bootstrap_db}" in postgres_section
+        assert "POSTGRES_DB: ${POSTGRES_DB:-app_db}" in postgres_section
 
     def test_redis_exposes_local_dev_port(self) -> None:
         """Redis must publish a configurable localhost-only dev port."""
@@ -489,7 +489,7 @@ class TestMainEntryPoint:
 class TestMainModuleEntryPoint:
     """__main__.py must exist and mirror the uvicorn configuration of main.py.
 
-    This enables running the app as ``uv run python -m fastapi_bootstrap``,
+    This enables running the app as ``uv run python -m app``,
     which is equivalent to the explicit uvicorn invocation in the Makefile.
     """
 
@@ -498,7 +498,7 @@ class TestMainModuleEntryPoint:
         assert _MAIN_MODULE.exists(), (
             f"__main__.py not found at {_MAIN_MODULE}. "
             "The package must define __main__.py so it can be invoked with "
-            "'uv run python -m fastapi_bootstrap'."
+            "'uv run python -m app'."
         )
 
     def test_main_module_calls_uvicorn_run(self) -> None:
@@ -554,18 +554,18 @@ class TestDevelopmentModeSettings:
     that drives the hot-reload decision in main.py."""
 
     def setup_method(self) -> None:
-        from fastapi_bootstrap.core.config import get_settings
+        from core.config import get_settings
 
         get_settings.cache_clear()
 
     def teardown_method(self) -> None:
-        from fastapi_bootstrap.core.config import get_settings
+        from core.config import get_settings
 
         get_settings.cache_clear()
 
     def test_is_development_true_by_default(self) -> None:
         """APP_ENV defaults to 'development' — is_development() must be True."""
-        from fastapi_bootstrap.core.config import Settings
+        from core.config import Settings
 
         s = Settings(_env_file=None)  # type: ignore[call-arg]
         assert s.is_development() is True, (
@@ -575,14 +575,14 @@ class TestDevelopmentModeSettings:
 
     def test_is_production_false_by_default(self) -> None:
         """is_production() must be False in the default dev configuration."""
-        from fastapi_bootstrap.core.config import Settings
+        from core.config import Settings
 
         s = Settings(_env_file=None)  # type: ignore[call-arg]
         assert s.is_production() is False
 
     def test_is_development_false_in_production(self) -> None:
         """is_development() must return False when APP_ENV=production."""
-        from fastapi_bootstrap.core.config import Settings
+        from core.config import Settings
 
         with patch.dict(os.environ, {"APP_ENV": "production"}, clear=False):
             s = Settings(_env_file=None)  # type: ignore[call-arg]
@@ -591,7 +591,7 @@ class TestDevelopmentModeSettings:
 
     def test_is_development_false_in_staging(self) -> None:
         """is_development() must return False for staging env."""
-        from fastapi_bootstrap.core.config import Settings
+        from core.config import Settings
 
         with patch.dict(os.environ, {"APP_ENV": "staging"}, clear=False):
             s = Settings(_env_file=None)  # type: ignore[call-arg]
@@ -599,7 +599,7 @@ class TestDevelopmentModeSettings:
 
     def test_reload_decision_matches_is_development(self) -> None:
         """The reload flag computed in main.py follows is_development() exactly."""
-        from fastapi_bootstrap.core.config import Settings
+        from core.config import Settings
 
         dev_settings = Settings(_env_file=None)  # type: ignore[call-arg]
         assert dev_settings.is_development() is True, "reload must be ON in dev"

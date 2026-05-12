@@ -6,7 +6,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi_bootstrap.domains.auth.repository import AuthRepository
+from domains.auth.repository import AuthRepository
 
 
 class _ScalarResult:

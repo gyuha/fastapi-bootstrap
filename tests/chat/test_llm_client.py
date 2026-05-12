@@ -28,8 +28,8 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.messages.ai import AIMessageChunk
 
-from fastapi_bootstrap.core.config import LLMProvider, LLMSettings
-from fastapi_bootstrap.domains.chat.llm_client import LLMClient, get_llm_client
+from core.config import LLMProvider, LLMSettings
+from domains.chat.llm_client import LLMClient, get_llm_client
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -76,7 +76,7 @@ def _make_client(
     Returns (client, mock_chat_instance).
     """
     settings = _make_llm_settings(provider, model)
-    with patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM") as MockChatLiteLLM:
+    with patch("infra.llm.provider_factory.ChatLiteLLM") as MockChatLiteLLM:
         mock_instance = mock_chat or MagicMock()
         MockChatLiteLLM.return_value = mock_instance
         client = LLMClient(settings=settings, **override_kwargs)
@@ -92,12 +92,12 @@ class TestLLMClientConstructor:
     """LLMClient must wire ChatLiteLLM with correct kwargs from ProviderFactory."""
 
     def test_model_string_openai(self) -> None:
-        with patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"):
+        with patch("infra.llm.provider_factory.ChatLiteLLM"):
             client = LLMClient(settings=_make_llm_settings("openai", "gpt-4o"))
         assert client.model_string == "openai/gpt-4o"
 
     def test_model_string_anthropic(self) -> None:
-        with patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"):
+        with patch("infra.llm.provider_factory.ChatLiteLLM"):
             client = LLMClient(
                 settings=_make_llm_settings(
                     "anthropic",
@@ -109,7 +109,7 @@ class TestLLMClientConstructor:
         assert client.model_string == "anthropic/claude-3-5-sonnet-20241022"
 
     def test_model_string_gemini(self) -> None:
-        with patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"):
+        with patch("infra.llm.provider_factory.ChatLiteLLM"):
             client = LLMClient(
                 settings=_make_llm_settings(
                     "gemini",
@@ -121,7 +121,7 @@ class TestLLMClientConstructor:
         assert client.model_string == "gemini/gemini-1.5-flash"
 
     def test_model_string_ollama(self) -> None:
-        with patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"):
+        with patch("infra.llm.provider_factory.ChatLiteLLM"):
             client = LLMClient(
                 settings=_make_llm_settings(
                     "ollama",
@@ -133,7 +133,7 @@ class TestLLMClientConstructor:
         assert client.model_string == "ollama/llama3.2"
 
     def test_model_string_azure_with_deployment(self) -> None:
-        with patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"):
+        with patch("infra.llm.provider_factory.ChatLiteLLM"):
             client = LLMClient(
                 settings=_make_llm_settings(
                     "azure",
@@ -147,12 +147,12 @@ class TestLLMClientConstructor:
         assert client.model_string == "azure/prod-gpt4o"
 
     def test_provider_property(self) -> None:
-        with patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"):
+        with patch("infra.llm.provider_factory.ChatLiteLLM"):
             client = LLMClient(settings=_make_llm_settings("openai", "gpt-4o"))
         assert client.provider == "openai"
 
     def test_provider_property_anthropic(self) -> None:
-        with patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"):
+        with patch("infra.llm.provider_factory.ChatLiteLLM"):
             client = LLMClient(
                 settings=_make_llm_settings(
                     "anthropic",
@@ -166,7 +166,7 @@ class TestLLMClientConstructor:
     def test_chat_property_returns_chat_litellm_instance(self) -> None:
         mock_chat_instance = MagicMock()
         with patch(
-            "fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM",
+            "infra.llm.provider_factory.ChatLiteLLM",
             return_value=mock_chat_instance,
         ):
             client = LLMClient(settings=_make_llm_settings("openai", "gpt-4o"))
@@ -180,7 +180,7 @@ class TestLLMClientConstructor:
             return MagicMock()
 
         with patch(
-            "fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM",
+            "infra.llm.provider_factory.ChatLiteLLM",
             side_effect=_capture,
         ):
             LLMClient(
@@ -201,7 +201,7 @@ class TestLLMClientConstructor:
             return MagicMock()
 
         with patch(
-            "fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM",
+            "infra.llm.provider_factory.ChatLiteLLM",
             side_effect=_capture,
         ):
             LLMClient(
@@ -216,9 +216,9 @@ class TestLLMClientConstructor:
     def test_none_settings_falls_back_to_env(self) -> None:
         """Passing settings=None must not raise; uses LLMSettings() defaults."""
         with (
-            patch("fastapi_bootstrap.domains.chat.llm_client.LLMSettings") as MockLLMSettings,
-            patch("fastapi_bootstrap.domains.chat.llm_client.ProviderFactory") as MockFactory,
-            patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"),
+            patch("domains.chat.llm_client.LLMSettings") as MockLLMSettings,
+            patch("domains.chat.llm_client.ProviderFactory") as MockFactory,
+            patch("infra.llm.provider_factory.ChatLiteLLM"),
         ):
             mock_settings = MagicMock()
             mock_settings.provider.value = "openai"
@@ -460,8 +460,8 @@ class TestGetLlmClient:
 
     def test_returns_llm_client_instance(self) -> None:
         with (
-            patch("fastapi_bootstrap.domains.chat.llm_client.get_settings") as mock_get_settings,
-            patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"),
+            patch("domains.chat.llm_client.get_settings") as mock_get_settings,
+            patch("infra.llm.provider_factory.ChatLiteLLM"),
         ):
             mock_settings = MagicMock()
             mock_llm_settings = _make_llm_settings("openai", "gpt-4o-mini")
@@ -475,8 +475,8 @@ class TestGetLlmClient:
     def test_factory_reads_from_settings_llm(self) -> None:
         """Ensure get_llm_client uses settings.llm, not raw environment vars."""
         with (
-            patch("fastapi_bootstrap.domains.chat.llm_client.get_settings") as mock_get_settings,
-            patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"),
+            patch("domains.chat.llm_client.get_settings") as mock_get_settings,
+            patch("infra.llm.provider_factory.ChatLiteLLM"),
         ):
             mock_settings = MagicMock()
             mock_llm_settings = _make_llm_settings(
@@ -495,8 +495,8 @@ class TestGetLlmClient:
 
     def test_factory_calls_get_settings(self) -> None:
         with (
-            patch("fastapi_bootstrap.domains.chat.llm_client.get_settings") as mock_get_settings,
-            patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"),
+            patch("domains.chat.llm_client.get_settings") as mock_get_settings,
+            patch("infra.llm.provider_factory.ChatLiteLLM"),
         ):
             mock_settings = MagicMock()
             mock_settings.llm = _make_llm_settings("openai", "gpt-4o-mini")
@@ -547,7 +547,7 @@ class TestProviderPortability:
         elif provider == "azure":
             extra = {"openai_api_key": "", "azure_api_key": "az-key"}
 
-        with patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"):
+        with patch("infra.llm.provider_factory.ChatLiteLLM"):
             client = LLMClient(settings=_make_llm_settings(provider, model, **extra))
 
         assert client.model_string == expected_model_string
@@ -569,7 +569,7 @@ class TestProviderPortability:
             elif provider == "gemini":
                 extra["gemini_api_key"] = "AIza"
 
-            with patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"):
+            with patch("infra.llm.provider_factory.ChatLiteLLM"):
                 client = LLMClient(settings=_make_llm_settings(provider, model, **extra))
 
             assert client.model_string.startswith(f"{provider}/"), (

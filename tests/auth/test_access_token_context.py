@@ -10,12 +10,12 @@ from fastapi import Depends, FastAPI
 from httpx import ASGITransport, AsyncClient
 from jose import jwt
 
-from fastapi_bootstrap.core.config import get_settings
-from fastapi_bootstrap.core.database import get_async_session
-from fastapi_bootstrap.core.redis import get_redis_dep
-from fastapi_bootstrap.domains.auth import security
-from fastapi_bootstrap.domains.auth.router import _get_service, router
-from fastapi_bootstrap.domains.auth.security import create_access_token
+from core.config import get_settings
+from core.database import get_async_session
+from core.redis import get_redis_dep
+from domains.auth import security
+from domains.auth.router import _get_service, router
+from domains.auth.security import create_access_token
 
 
 class CapturingRedis:
@@ -112,8 +112,8 @@ def test_decode_access_token_context_returns_jti_and_exp() -> None:
 
 
 def test_decode_access_token_context_rejects_refresh_token_type() -> None:
-    from fastapi_bootstrap.core.exceptions import UnauthorizedError
-    from fastapi_bootstrap.domains.auth.security import create_refresh_token
+    from core.exceptions import UnauthorizedError
+    from domains.auth.security import create_refresh_token
 
     refresh_token, _jti, _family_id = create_refresh_token("00000000-0000-4000-8000-000000000001")
 

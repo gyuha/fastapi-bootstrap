@@ -43,13 +43,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
-from fastapi_bootstrap.domains.chat.container import get_chat_service, get_llm_factory
-from fastapi_bootstrap.domains.chat.ports import (
+from domains.chat.container import get_chat_service, get_llm_factory
+from domains.chat.ports import (
     AbstractLLMPort,
     LLMClientFactoryProtocol,
     LLMClientProtocol,
 )
-from fastapi_bootstrap.domains.chat.service import ChatService
+from domains.chat.service import ChatService
 
 # ---------------------------------------------------------------------------
 # Stub implementations — zero concrete provider imports
@@ -106,7 +106,7 @@ class TestContainerModuleIsolation:
 
     def test_container_does_not_expose_chat_litellm(self) -> None:
         """``ChatLiteLLM`` must NOT appear in the container module namespace."""
-        import fastapi_bootstrap.domains.chat.container as container_module
+        import domains.chat.container as container_module
 
         assert "ChatLiteLLM" not in vars(container_module), (
             "container.py exposed ChatLiteLLM at module level — concrete "
@@ -119,7 +119,7 @@ class TestContainerModuleIsolation:
         The concrete factory is imported lazily *inside* :func:`get_llm_factory`
         so that the container module's namespace remains free of it.
         """
-        import fastapi_bootstrap.domains.chat.container as container_module
+        import domains.chat.container as container_module
 
         assert "DefaultLLMClientFactory" not in vars(container_module), (
             "container.py exposed DefaultLLMClientFactory at module level — "
@@ -128,7 +128,7 @@ class TestContainerModuleIsolation:
 
     def test_container_does_not_expose_llm_client_class(self) -> None:
         """``LLMClient`` (concrete client) must NOT appear in the container namespace."""
-        import fastapi_bootstrap.domains.chat.container as container_module
+        import domains.chat.container as container_module
 
         assert "LLMClient" not in vars(container_module), (
             "container.py exposed concrete LLMClient class at module level"
@@ -136,7 +136,7 @@ class TestContainerModuleIsolation:
 
     def test_container_does_not_expose_provider_factory(self) -> None:
         """``ProviderFactory`` (routing helper) must NOT appear in the container namespace."""
-        import fastapi_bootstrap.domains.chat.container as container_module
+        import domains.chat.container as container_module
 
         assert "ProviderFactory" not in vars(container_module), (
             "container.py exposed ProviderFactory at module level — routing "
@@ -145,7 +145,7 @@ class TestContainerModuleIsolation:
 
     def test_container_does_not_expose_langchain_litellm(self) -> None:
         """``langchain_litellm`` package must NOT be in the container namespace."""
-        import fastapi_bootstrap.domains.chat.container as container_module
+        import domains.chat.container as container_module
 
         assert "langchain_litellm" not in vars(container_module), (
             "container.py imported langchain_litellm — a DI container must "
@@ -154,7 +154,7 @@ class TestContainerModuleIsolation:
 
     def test_container_public_api_is_only_di_functions_and_interface(self) -> None:
         """Only DI functions and interface types should be publicly accessible."""
-        import fastapi_bootstrap.domains.chat.container as container_module
+        import domains.chat.container as container_module
 
         # Concrete infrastructure names that must NOT be present
         forbidden = {
@@ -183,8 +183,8 @@ class TestGetLlmFactory:
     def test_return_value_satisfies_protocol(self) -> None:
         """The registered factory must be an instance of LLMClientFactoryProtocol."""
         with (
-            patch("fastapi_bootstrap.domains.chat.llm_client.get_settings") as mock_settings,
-            patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"),
+            patch("domains.chat.llm_client.get_settings") as mock_settings,
+            patch("infra.llm.provider_factory.ChatLiteLLM"),
         ):
             mock_settings.return_value.llm.provider.value = "openai"
             factory = get_llm_factory()
@@ -211,8 +211,8 @@ class TestGetLlmFactory:
     def test_factory_has_get_llm_client_callable(self) -> None:
         """The returned factory must expose a callable get_llm_client."""
         with (
-            patch("fastapi_bootstrap.domains.chat.llm_client.get_settings") as mock_settings,
-            patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"),
+            patch("domains.chat.llm_client.get_settings") as mock_settings,
+            patch("infra.llm.provider_factory.ChatLiteLLM"),
         ):
             mock_settings.return_value.llm.provider.value = "openai"
             factory = get_llm_factory()
@@ -433,7 +433,7 @@ class TestProviderIsolationInDILayer:
         This verifies the domain isolation guarantee is maintained even after
         introducing the container layer.
         """
-        import fastapi_bootstrap.domains.chat.service as service_module
+        import domains.chat.service as service_module
 
         forbidden = ["ChatLiteLLM", "LLMClient", "DefaultLLMClientFactory", "ProviderFactory"]
         module_vars = vars(service_module)
@@ -483,7 +483,7 @@ class TestProviderIsolationInDILayer:
 
     def test_container_module_imports_only_interface_from_ports(self) -> None:
         """The container imports LLMClientFactoryProtocol from ports (interface module)."""
-        import fastapi_bootstrap.domains.chat.container as container_module
+        import domains.chat.container as container_module
 
         module_vars = vars(container_module)
 
@@ -499,8 +499,8 @@ class TestProviderIsolationInDILayer:
         Verifies the entire chain: container factory → client → protocol compatibility.
         """
         with (
-            patch("fastapi_bootstrap.domains.chat.llm_client.get_settings") as mock_settings,
-            patch("fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"),
+            patch("domains.chat.llm_client.get_settings") as mock_settings,
+            patch("infra.llm.provider_factory.ChatLiteLLM"),
         ):
             mock_settings.return_value.llm.provider.value = "openai"
             mock_settings.return_value.llm.as_litellm_kwargs.return_value = {

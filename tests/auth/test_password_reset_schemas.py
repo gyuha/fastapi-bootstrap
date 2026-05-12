@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from fastapi_bootstrap.domains.auth.schemas import (
+from domains.auth.schemas import (
     PasswordResetRequest,
     PasswordResetRequestResponse,
 )

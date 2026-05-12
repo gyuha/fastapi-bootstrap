@@ -10,7 +10,7 @@ from fastapi import Response
 from httpx import ASGITransport, AsyncClient
 from starlette.requests import Request
 
-from fastapi_bootstrap import main
+import main
 
 
 class FakeRedis:
@@ -80,8 +80,8 @@ def patched_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
         assert port == main.settings.mail_port
         return FakeReader(), FakeWriter()
 
-    monkeypatch.setattr("fastapi_bootstrap.core.database.engine", FakeEngine())
-    monkeypatch.setattr("fastapi_bootstrap.core.redis.get_redis_client", fake_get_redis_client)
+    monkeypatch.setattr("core.database.engine", FakeEngine())
+    monkeypatch.setattr("core.redis.get_redis_client", fake_get_redis_client)
     monkeypatch.setattr(main.asyncio, "open_connection", fake_open_connection)
 
 
@@ -118,8 +118,8 @@ async def test_ready_endpoint_reports_degraded_dependency(monkeypatch: pytest.Mo
     async def fake_open_connection(host: str, port: int) -> tuple[FakeReader, FakeWriter]:
         return FakeReader(), FakeWriter()
 
-    monkeypatch.setattr("fastapi_bootstrap.core.database.engine", FakeEngine())
-    monkeypatch.setattr("fastapi_bootstrap.core.redis.get_redis_client", failing_get_redis_client)
+    monkeypatch.setattr("core.database.engine", FakeEngine())
+    monkeypatch.setattr("core.redis.get_redis_client", failing_get_redis_client)
     monkeypatch.setattr(main.asyncio, "open_connection", fake_open_connection)
 
     transport = ASGITransport(app=main.create_app())
@@ -146,8 +146,8 @@ async def test_lifespan_warms_and_closes_redis(monkeypatch: pytest.MonkeyPatch) 
         closed = True
 
     monkeypatch.setattr(main, "configure_logging", lambda **kwargs: None)
-    monkeypatch.setattr("fastapi_bootstrap.core.redis.get_redis_client", fake_get_redis_client)
-    monkeypatch.setattr("fastapi_bootstrap.core.redis.close_redis_client", fake_close_redis_client)
+    monkeypatch.setattr("core.redis.get_redis_client", fake_get_redis_client)
+    monkeypatch.setattr("core.redis.close_redis_client", fake_close_redis_client)
 
     async with main.lifespan(main.create_app()):
         assert closed is False

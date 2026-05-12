@@ -8,10 +8,10 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from fastapi_bootstrap.core.exceptions import UnauthorizedError
-from fastapi_bootstrap.domains.auth.router import _get_service, router
-from fastapi_bootstrap.domains.auth.security import decode_token
-from fastapi_bootstrap.domains.auth.service import AuthService
+from core.exceptions import UnauthorizedError
+from domains.auth.router import _get_service, router
+from domains.auth.security import decode_token
+from domains.auth.service import AuthService
 
 
 class FakeLoginService:

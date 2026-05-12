@@ -23,9 +23,9 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
-    
+
     "License :: OSI Approved :: MIT License",
-    
+
     "Typing :: Typed",
 ]
 
@@ -66,7 +66,7 @@ dependencies = [
     # ── Rate limiting ─────────────────────────────────────────────────────
     "slowapi>=0.1.9",                    # Redis-backed rate limiting (per-user / per-IP)
 
-    
+
     # ── Streaming / LLM / Chat domain ─────────────────────────────────────
     "sse-starlette>=2.1.0",              # Server-Sent Events for LLM token streaming
     "langchain>=0.3.0",
@@ -75,7 +75,7 @@ dependencies = [
     "langchain-litellm>=0.2.0",         # ChatLiteLLM adapter — LLM provider portability
     "litellm>=1.50.0",                  # Provider routing (openai/anthropic/gemini/azure/ollama)
     "tenacity>=8.5.0",                  # Retry logic for transient LLM errors
-    
+
 ]
 
 # ---------------------------------------------------------------------------
@@ -92,10 +92,10 @@ dev = [
     "fakeredis>=2.26.0",         # In-memory Redis stub for unit/integration tests
     "ruff>=0.8.0",
     "mypy>=1.13.0",
-    
+
     "pre-commit>=4.0.0",
     "detect-secrets>=1.5.0",     # Secret scanning — used by pre-commit + make secrets-baseline
-    
+
     # Type stubs
     "sqlalchemy[mypy]>=2.0.36",
     "types-passlib>=1.7.7",
@@ -117,7 +117,7 @@ default-groups = ["dev"]
 # Hatchling build (src layout)
 # ---------------------------------------------------------------------------
 [tool.hatch.build.targets.wheel]
-packages = ["src/fastapi_bootstrap"]
+packages = ["src"]
 
 [tool.hatch.build.targets.sdist]
 include = [
@@ -154,19 +154,17 @@ select = [
     "RUF", # Ruff-specific rules
 ]
 ignore = [
-    "ANN101", # missing type annotation for self
-    "ANN102", # missing type annotation for cls
     "ANN401", # dynamic kwargs are used at framework/LLM boundaries
     "S101",   # use of assert (allowed in tests)
     "B008",   # do not perform function calls in defaults (FastAPI DI pattern)
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "ANN", "T20", "S104", "S105", "S106", "B017", "PT011", "N806", "RUF059", "RUF043", "PT018", "E501"]
+"tests/**" = ["S101", "ANN", "T20", "S104", "S105", "S106", "B017", "PT011", "N806", "PT018", "E501"]
 "alembic/**" = ["ANN", "N999", "E501"]
 "scripts/**" = ["T20", "ANN", "S310", "S104", "S603", "S607", "UP036", "E501", "N806"]
-"src/fastapi_bootstrap/core/config.py" = ["S104"]
-"src/fastapi_bootstrap/domains/auth/oauth/*.py" = ["S105"]
+"src/core/config.py" = ["S104"]
+"src/domains/auth/oauth/*.py" = ["S105"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -179,6 +177,9 @@ line-ending = "lf"
 [tool.mypy]
 python_version = "3.12"
 strict = true
+mypy_path = ["src"]
+explicit_package_bases = true
+exclude = ["^src/__init__\\.py$", "^src/__main__\\.py$"]
 plugins = ["pydantic.mypy", "sqlalchemy.ext.mypy.plugin"]
 
 # Relax some strict rules for prototype iteration
@@ -193,13 +194,13 @@ module = [
     "alembic.*",
     "redis.*",
     "slowapi.*",
-    
+
     "langchain.*",
     "langchain_core.*",
     "langchain_community.*",
     "langchain_litellm.*",
     "litellm.*",
-    
+
 ]
 ignore_missing_imports = true
 
@@ -209,6 +210,7 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+pythonpath = ["src"]
 python_files = ["test_*.py", "*_test.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
@@ -219,7 +221,7 @@ filterwarnings = [
 ]
 addopts = [
     "--strict-markers",
-    "--cov=src/fastapi_bootstrap",
+    "--cov=src",
     "--cov-report=term-missing",
     "--cov-report=html:htmlcov",
     "--cov-fail-under=70",
@@ -234,7 +236,7 @@ markers = [
 # Coverage
 # ---------------------------------------------------------------------------
 [tool.coverage.run]
-source = ["src/fastapi_bootstrap"]
+source = ["src"]
 branch = true
 omit = [
     "*/migrations/*",

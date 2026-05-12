@@ -11,14 +11,14 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from fastapi_bootstrap.core.exceptions import (
+from core.exceptions import (
     AppError,
     ConflictError,
     ForbiddenError,
     NotFoundError,
     UnauthorizedError,
 )
-from fastapi_bootstrap.domains.auth.router import _get_service, router
+from domains.auth.router import _get_service, router
 
 
 class FakeSignupService:

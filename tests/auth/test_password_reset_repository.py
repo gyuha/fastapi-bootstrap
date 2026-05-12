@@ -6,9 +6,9 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from fastapi_bootstrap.domains.auth.models import PasswordReset
-from fastapi_bootstrap.domains.auth.repository import AuthRepository
-from fastapi_bootstrap.domains.auth.security import hash_token
+from domains.auth.models import PasswordReset
+from domains.auth.repository import AuthRepository
+from domains.auth.security import hash_token
 
 
 class _ScalarResult:

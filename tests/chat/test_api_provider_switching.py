@@ -68,9 +68,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from fastapi_bootstrap.core.config import get_settings
-from fastapi_bootstrap.domains.chat.container import get_llm_factory
-from fastapi_bootstrap.domains.chat.ports import LLMClientProtocol
+from core.config import get_settings
+from domains.chat.container import get_llm_factory
+from domains.chat.ports import LLMClientProtocol
 
 from ._mocks import (
     FAKE_RESPONSE_TEXT,
@@ -87,7 +87,7 @@ from ._mocks import (
 # ---------------------------------------------------------------------------
 
 #: Patch path for ChatLiteLLM class in the llm_client module
-_LITELLM_PATH: str = "fastapi_bootstrap.infra.llm.provider_factory.ChatLiteLLM"
+_LITELLM_PATH: str = "infra.llm.provider_factory.ChatLiteLLM"
 
 #: API endpoint paths
 _CHAT_COMPLETE_URL: str = "/api/v1/chat/complete"
@@ -197,7 +197,7 @@ def chat_test_app() -> FastAPI:
     The fixture is **function-scoped** (default) so each test gets a fresh
     app instance with no leftover ``dependency_overrides``.
     """
-    from fastapi_bootstrap.domains.chat.router import router as chat_router
+    from domains.chat.router import router as chat_router
 
     application = FastAPI(title="Chat Integration Test App")
     application.include_router(chat_router, prefix="/api/v1")
